@@ -1,11 +1,12 @@
 blueprint:
+  domain: automation
+  source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/humidifier_switch_control/humidifier_switch_control.yaml
   name: "가습기 스위치 제어"
   description: "습도 설정이 불가능한 가습기나, USB 가습기 제어용으로 만들었습니다.\n
   v1.2\n
   ---------\n
   필요 구성요소는 switch 또는 humidifier 그리고 humidity sensor 입니다.\n
   밤, 낮으로 구분하여 켜기 끄기 습도를 설정 할수 있습니다."
-  domain: automation
 
   input:
     humidity_switch:
