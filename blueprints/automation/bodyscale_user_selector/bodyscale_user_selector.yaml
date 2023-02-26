@@ -4,7 +4,7 @@ blueprint:
   name: "Body Scale User Selector"
   description:
     "측정된 체중을 비슷한 체중의 사용자로 선택해 업데이트 해 줍니다.\n
-    v1.1\n
+    v1.2\n
     -----------------------------------------\n
     input_number 사용자 센서 생성 규칙.\n
     - 사용자 체중 센서명에는 weight가 들어가야 합니다.\n
@@ -60,6 +60,13 @@ blueprint:
           step: 1
           unit_of_measurement: "kg"
 
+    on_action:
+      name: action
+      description: 측정 후 동작
+      default: []
+      selector:
+        action: {}
+
 trigger:
   - platform: state
     entity_id: !input weight_entity
@@ -70,6 +77,7 @@ variables:
   impedance_entity: !input impedance_entity
   user_entities: !input user_entities
   weight_distinction: !input weight_distinction
+  on_action: !input on_action
   min_weight: !input min_weight
   user_weight_entity: >-
     {% set r = namespace(user='') %}
@@ -107,5 +115,13 @@ action:
           entity_id: "{{user_impedance_entity}}"
         data:
           value: "{{ states(impedance_entity) }}"
+  - if:
+      - condition: template
+        value_template: '{{ on_action != "" }}'
+    then:
+      - choose:
+          - conditions: []
+            sequence: !input on_action
 
-mode: parallel
+mode: restart
+max_exceeded: silent
