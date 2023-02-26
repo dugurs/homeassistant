@@ -62,7 +62,9 @@ blueprint:
 
     on_action:
       name: action
-      description: 측정 후 동작
+      description: "측정 후 액션\n
+      사용가능 template\n
+      `{{weight}}`, `{{user}}`"
       default: []
       selector:
         action: {}
@@ -93,6 +95,7 @@ variables:
     {% endfor %}
     {{ r.user }}
   user_impedance_entity: '{{ user_weight_entity.replace("weight","impedance") }}'
+  user: '{{ state_attr(user_weight_entity, "friendly_name") }}'
 
 condition:
   - condition: numeric_state
