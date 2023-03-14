@@ -4,7 +4,7 @@ blueprint:
   name: "Body Scale User Selector"
   description:
     "측정된 체중을 비슷한 체중의 사용자로 선택해 업데이트 해 줍니다.\n
-    v1.2\n
+    v1.3 2023-03-14\n
     -----------------------------------------\n
     input_number 사용자 센서 생성 규칙.\n
     - 사용자 체중 센서명에는 weight가 들어가야 합니다.\n
@@ -15,12 +15,13 @@ blueprint:
     예 : `input_number.userxxx_weight` -> `input_number.userxxx_impedance`"
 
   input:
-    weight_entity:
+    weight_entitys:
       name: weight sensor
-      description: "체중 센서"
+      description: "체중 센서\n`weight`, `non_stabilized_weight`, `stabilized_weight`등 여러 체중센서를 선택해 줄 수 있습니다."
       selector:
         entity:
           domain: sensor
+          multiple: true
           # device_class: weight
 
     impedance_entity:
@@ -34,9 +35,9 @@ blueprint:
       name: input_number Weight User entities
       description: "생성한 사용자 체중을 선택 해 주세요.\n손님 체중도 선택 해야 합니다."
       selector:
-        target:
-          entity:
-            domain: input_number
+        entity:
+          domain: input_number
+          multiple: true
 
     weight_distinction:
       name: weight distinction
@@ -64,17 +65,17 @@ blueprint:
       name: action
       description: "측정 후 액션\n
       사용가능 template\n
-      `{{weight}}`, `{{user}}`"
+      `{{weight}}`, `{{user}}`, `{{meas_status}}`"
       default: []
       selector:
         action: {}
 
 trigger:
   - platform: state
-    entity_id: !input weight_entity
+    entity_id: !input weight_entitys
 
 variables:
-  weight_entity: !input weight_entity
+  weight_entity: '{{trigger.entity_id}}'
   weight: "{{ states(weight_entity)|float }}"
   impedance_entity: !input impedance_entity
   user_entities: !input user_entities
@@ -84,7 +85,7 @@ variables:
   user_weight_entity: >-
     {% set r = namespace(user='') %}
     {% set r.dist = 1 %}
-    {% for user_entity in user_entities.entity_id %}
+    {% for user_entity in user_entities %}
       {% set dist = (states(user_entity)|float / weight - 1)|abs %}
       {% if 'guest' in user_entity and r.user == '' %}
         {% set r.user = user_entity %}
@@ -94,13 +95,21 @@ variables:
       {% endif %}
     {% endfor %}
     {{ r.user }}
+  use_impedance: '{{ impedance_entity != "" and states[weight_entity].last_updated.timestamp()|int == states[impedance_entity].last_updated.timestamp()|int }}'
+  meas_status: >-
+    {% if use_impedance %}
+      저항
+    {% elif weight_entity != weight_entity.replace("non_stabilized","@") %}
+      불안정
+    {% elif weight_entity != weight_entity.replace("stabilized","@") %}
+      안정
+    {% endif %}
   user_impedance_entity: '{{ user_weight_entity.replace("weight","impedance") }}'
   user: '{{ state_attr(user_weight_entity, "friendly_name") }}'
 
 condition:
-  - condition: numeric_state
-    entity_id: !input weight_entity
-    above: !input min_weight
+  - condition: template
+    value_template: '{{ weight >= min_weight }}'
 
 action:
   - service: input_number.set_value
@@ -111,16 +120,17 @@ action:
 
   - if:
       - condition: template
-        value_template: '{{ impedance_entity != "" }}'
+        value_template: '{{ use_impedance and states(impedance_entity) != "unknown" }}'
     then:
       - service: input_number.set_value
         target:
           entity_id: "{{user_impedance_entity}}"
         data:
           value: "{{ states(impedance_entity) }}"
+
   - if:
       - condition: template
-        value_template: '{{ on_action != "" }}'
+        value_template: '{{ on_action | length > 0 }}'
     then:
       - choose:
           - conditions: []
