@@ -98,7 +98,7 @@ variables:
   use_impedance: '{{ impedance_entity != "" and states[weight_entity].last_updated.timestamp()|int == states[impedance_entity].last_updated.timestamp()|int }}'
   meas_status: >-
     {% if use_impedance %}
-      저항
+      체지방
     {% elif weight_entity != weight_entity.replace("non_stabilized","@") %}
       불안정
     {% elif weight_entity != weight_entity.replace("stabilized","@") %}
