@@ -12,7 +12,12 @@ blueprint:
     - `input_number.guest_weight`과 같이 센서명에 `guest`가 들어간 손님용도 만들어야 합니다.\n
     - impedance를 사용하려면, 센서명을\n
     체중센서명에서 `weight`을 `impedance`로 치환 해 만들어야 합니다.\n
-    예 : `input_number.userxxx_weight` -> `input_number.userxxx_impedance`"
+    예 : `input_number.userxxx_weight` -> `input_number.userxxx_impedance`\n
+    -----------------------------------------\n
+    사오미 체중계 기준으로\n
+    센서명이 non_stabilized_weight 불안정, stabilized_weight 안정, weight + impedance는 체지방 측정입니다.
+    인바디 측정후 5분이네 안정,불안정측정은 건너뜁니다."
+
 
   input:
     weight_entitys:
@@ -75,6 +80,7 @@ trigger:
     entity_id: !input weight_entitys
 
 variables:
+  weight_entitys: !input weight_entitys
   weight_entity: '{{trigger.entity_id}}'
   weight: "{{ states(weight_entity)|float }}"
   impedance_entity: !input impedance_entity
@@ -98,7 +104,7 @@ variables:
   use_impedance: '{{ impedance_entity != "" and states[weight_entity].last_updated.timestamp()|int == states[impedance_entity].last_updated.timestamp()|int }}'
   meas_status: >-
     {% if use_impedance %}
-      저항
+      인바디
     {% elif weight_entity != weight_entity.replace("non_stabilized","@") %}
       불안정
     {% elif weight_entity != weight_entity.replace("stabilized","@") %}
@@ -106,10 +112,22 @@ variables:
     {% endif %}
   user_impedance_entity: '{{ user_weight_entity.replace("weight","impedance") }}'
   user: '{{ state_attr(user_weight_entity, "friendly_name") }}'
+  nexttime: >-
+    {# 체중센서가 1개 일때 또는 인바디가 측정되었을때 는 계속 #}
+    {% if weight_entitys|length == 1 or use_impedance %}
+      {{true}}
+    {# 인바디 측정이 아니고, 같은 사용자의 인바디 측정 5분이 지났을때  #}
+    {% elif meas_status != "인바디" and states[user_impedance_entity].last_updated.timestamp()|int - states[user_impedance_entity].last_updated.timestamp()|int > 360 %}
+      {{true}}
+    {% else %}
+      {{false}}
+    {% endif %}
 
 condition:
   - condition: template
     value_template: '{{ weight >= min_weight }}'
+  - condition: template
+    value_template: '{{ nexttime }}' 
 
 action:
   - service: input_number.set_value
@@ -136,5 +154,5 @@ action:
           - conditions: []
             sequence: !input on_action
 
-mode: restart
+mode: single
 max_exceeded: silent
