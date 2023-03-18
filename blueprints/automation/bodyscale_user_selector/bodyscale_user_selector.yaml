@@ -2,10 +2,9 @@ blueprint:
   domain: automation
   source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/bodyscale_user_selector/bodyscale_user_selector.yaml
   name: "Body Scale User Selector"
-  description:
-    "측정된 체중을 비슷한 체중의 사용자로 선택해 업데이트 해 줍니다.\n
-    v1.3 2023-03-14\n
-    -----------------------------------------\n
+  description: "측정된 체중을 비슷한 체중의 사용자로 선택해 업데이트 해 줍니다.\n
+    v1.4 2023-03-18\n
+    ---\n
     input_number 사용자 센서 생성 규칙.\n
     - 사용자 체중 센서명에는 weight가 들어가야 합니다.\n
     - 초기 체중은 직접입력 해주어야 합니다.\n
@@ -13,10 +12,10 @@ blueprint:
     - impedance를 사용하려면, 센서명을\n
     체중센서명에서 `weight`을 `impedance`로 치환 해 만들어야 합니다.\n
     예 : `input_number.userxxx_weight` -> `input_number.userxxx_impedance`\n
-    -----------------------------------------\n
+
     사오미 체중계 기준으로\n
-    센서명이 non_stabilized_weight 불안정, stabilized_weight 안정, weight + impedance는 체지방 측정입니다.
-    체자방 측정후 5분이네 안정,불안정측정은 건너뜁니다."
+    센서명이 non_stabilized_weight 불안정, stabilized_weight 안정, weight + impedance는 체지방 측정입니다.\n
+    체지방 측정후 5분이네 안정,불안정 측정은 건너뜁니다."
 
 
   input:
@@ -113,11 +112,11 @@ variables:
   user_impedance_entity: '{{ user_weight_entity.replace("weight","impedance") }}'
   user: '{{ state_attr(user_weight_entity, "friendly_name") }}'
   nexttime: >-
-    {# 체중센서가 1개 일때 또는 인바디가 측정되었을때 는 계속 #}
+    {# 체중센서가 1개 일때 또는 체지방가 측정되었을때 는 계속 #}
     {% if weight_entitys|length == 1 or use_impedance %}
       {{true}}
-    {# 인바디 측정이 아니고, 같은 사용자의 인바디 측정 5분이 지났을때  #}
-    {% elif meas_status != "인바디" and states[user_impedance_entity].last_updated.timestamp()|int - states[user_impedance_entity].last_updated.timestamp()|int > 360 %}
+    {# 체지방 측정이 아니고, 같은 사용자의 체지방 측정 5분이 지났을때  #}
+    {% elif meas_status != "체지방" and states[weight_entity].last_updated.timestamp()|int - states[user_impedance_entity].last_updated.timestamp()|int > 360 %}
       {{true}}
     {% else %}
       {{false}}
