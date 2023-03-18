@@ -16,7 +16,7 @@ blueprint:
     -----------------------------------------\n
     사오미 체중계 기준으로\n
     센서명이 non_stabilized_weight 불안정, stabilized_weight 안정, weight + impedance는 체지방 측정입니다.
-    인바디 측정후 5분이네 안정,불안정측정은 건너뜁니다."
+    체자방 측정후 5분이네 안정,불안정측정은 건너뜁니다."
 
 
   input:
@@ -104,7 +104,7 @@ variables:
   use_impedance: '{{ impedance_entity != "" and states[weight_entity].last_updated.timestamp()|int == states[impedance_entity].last_updated.timestamp()|int }}'
   meas_status: >-
     {% if use_impedance %}
-      인바디
+      체지방
     {% elif weight_entity != weight_entity.replace("non_stabilized","@") %}
       불안정
     {% elif weight_entity != weight_entity.replace("stabilized","@") %}
