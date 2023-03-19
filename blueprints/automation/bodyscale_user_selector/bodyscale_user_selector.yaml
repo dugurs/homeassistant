@@ -3,7 +3,7 @@ blueprint:
   source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/bodyscale_user_selector/bodyscale_user_selector.yaml
   name: "Body Scale User Selector"
   description: "측정된 체중을 비슷한 체중의 사용자로 선택해 업데이트 해 줍니다.\n
-    v1.4 2023-03-18\n
+    v1.4 2023-03-19\n
     ---\n
     input_number 사용자 센서 생성 규칙.\n
     - 사용자 체중 센서명에는 weight가 들어가야 합니다.\n
@@ -15,7 +15,9 @@ blueprint:
 
     사오미 체중계 기준으로\n
     센서명이 non_stabilized_weight 불안정, stabilized_weight 안정, weight + impedance는 체지방 측정입니다.\n
-    체지방 측정후 5분이네 안정,불안정 측정은 건너뜁니다."
+    체지방 측정후 5분이네 안정,불안정 측정은 건너뜁니다.\n
+    5분이내 동일 체중 측정은 건너뛴니다.\n
+    다중 체중센서 선택시, 측정후 체지방 측정이 아니면 15초동안 체중센서 트리거 대기 합니다."
 
 
   input:
@@ -111,14 +113,15 @@ variables:
     {% endif %}
   user_impedance_entity: '{{ user_weight_entity.replace("weight","impedance") }}'
   user: '{{ state_attr(user_weight_entity, "friendly_name") }}'
-  nexttime: >-
-    {# 체중센서가 1개 일때 또는 체지방가 측정되었을때 는 계속 #}
-    {% if weight_entitys|length == 1 or use_impedance %}
+  on_weight: >-
+    {# 체지방가 측정되었을때 는 계속 #}
+    {% if use_impedance %}
       {{true}}
-    {# 체지방 측정이 아니고, 같은 사용자의 체지방 측정 5분이 지났을때  #}
-    {% elif meas_status != "체지방" and states[weight_entity].last_updated.timestamp()|int - states[user_impedance_entity].last_updated.timestamp()|int > 360 %}
-      {{true}}
-    {% else %}
+    {# 측정 체중이 5분이내 체중과 동일하면 건너 뛰기 #}
+    {% elif states(weight_entity)|float == states(user_weight_entity)|float and now().timestamp()|int - states[user_weight_entity].last_updated.timestamp()|int <= 300 %}
+      {{false}}
+    {# 같은 사용자의 체지방 측정후 5분 이내면 건너 뛰기  #}
+    {% elif states[weight_entity].last_updated.timestamp()|int - states[user_impedance_entity].last_updated.timestamp()|int <= 300 %}
       {{false}}
     {% endif %}
 
@@ -126,9 +129,21 @@ condition:
   - condition: template
     value_template: '{{ weight >= min_weight }}'
   - condition: template
-    value_template: '{{ nexttime }}' 
+    value_template: '{{ on_weight }}' 
 
 action:
+  
+  - if:
+      - condition: template
+        value_template: '{{ weight_entitys|length > 1 and not use_impedance }}'
+    then:
+      - wait_for_trigger:
+          - platform: state
+            entity_id: !input weight_entitys
+        timeout: '00:00:15'
+        continue_on_timeout: true
+      - delay: '00:00:01'
+      
   - service: input_number.set_value
     target:
       entity_id: "{{user_weight_entity}}"
@@ -153,5 +168,5 @@ action:
           - conditions: []
             sequence: !input on_action
 
-mode: single
+mode: restart
 max_exceeded: silent
