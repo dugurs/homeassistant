@@ -123,6 +123,8 @@ variables:
     {# 같은 사용자의 체지방 측정후 5분 이내면 건너 뛰기  #}
     {% elif states[weight_entity].last_updated.timestamp()|int - states[user_impedance_entity].last_updated.timestamp()|int <= 300 %}
       {{false}}
+    {% else %}
+      {{true}}
     {% endif %}
 
 condition:
