@@ -1,0 +1,81 @@
+blueprint:
+  source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/airpurifier_night_off/airpurifier_night_off.yaml
+  name: 공기청정기 밤에 끄기
+  description: "v1.0"
+  domain: automation
+  input:
+    air_purifier:
+      name: 공기 청정기
+      description: "(fan)"
+      selector:
+        entity:
+          domain: fan
+          multiple: true
+    off_time:
+      name: 끄기 시간
+      description: "(input_datetime)"
+      selector:
+        entity:
+          domain: input_datetime
+    on_time:
+      name: 켜기 시간
+      description: "(input_datetime)"
+      selector:
+        entity:
+          domain: input_datetime
+    door_sensor:
+      name: 도어 센서
+      description: "(binary_sensor) 문이 열리면 공기청정기를 끕니다."
+      default: []
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class:
+            - door
+            - window
+          multiple: true
+
+trigger:
+  - platform: homeassistant
+    event: start
+  - platform: time
+    at: !input on_time
+  - platform: time
+    at: !input off_time
+  - platform: state
+    entity_id: !input door_sensor
+
+variables:
+  on_time: !input on_time
+  off_time: !input off_time
+  door_sensor: !input door_sensor
+  door_open: "{{ expand(door_sensor) | selectattr('state', 'eq', 'on') | list | count }}"
+
+action:
+  - if:
+      - condition: template
+        value_template: "{{ door_sensor | count > 0 }}"
+      - condition: template
+        value_template: "{{ door_open > 0 }}"
+    then:
+      - service: "fan.turn_off"
+        data: {}
+        target:
+          entity_id: !input air_purifier
+    else:
+      - if:
+          - condition: time
+            after: !input off_time
+            before: !input on_time
+        then:
+          - service: "fan.turn_off"
+            data: {}
+            target:
+              entity_id: !input air_purifier
+        else:
+          - service: "fan.turn_on"
+            data: {}
+            target:
+              entity_id: !input air_purifier
+mode: single
+max_exceeded: silent
