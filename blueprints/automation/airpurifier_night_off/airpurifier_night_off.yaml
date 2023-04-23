@@ -6,26 +6,26 @@ blueprint:
   input:
     air_purifier:
       name: 공기 청정기
-      description: "(fan)"
+      description: "fan"
       selector:
         entity:
           domain: fan
           multiple: true
     off_time:
       name: 끄기 시간
-      description: "(input_datetime)"
+      description: "input_datetime"
       selector:
         entity:
           domain: input_datetime
     on_time:
       name: 켜기 시간
-      description: "(input_datetime)"
+      description: "input_datetime"
       selector:
         entity:
           domain: input_datetime
     door_sensor:
       name: 도어 센서
-      description: "(binary_sensor) 문이 열리면 공기청정기를 끕니다."
+      description: "binary_sensor\n문이 열리면 공기청정기를 끕니다."
       default: []
       selector:
         entity:
