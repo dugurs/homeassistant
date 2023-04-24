@@ -25,7 +25,7 @@ blueprint:
           domain: input_datetime
     door_sensor:
       name: 도어 센서
-      description: "binary_sensor\n문이 열리면 공기청정기를 끕니다."
+      description: "binary_sensor\n문이 열리면 10초후에 공기청정기를 끕니다."
       default: []
       selector:
         entity:
@@ -58,6 +58,7 @@ action:
       - condition: template
         value_template: "{{ door_open > 0 }}"
     then:
+      - delay: "00:00:10"
       - service: "fan.turn_off"
         data: {}
         target:
@@ -77,5 +78,5 @@ action:
             data: {}
             target:
               entity_id: !input air_purifier
-mode: single
+mode: restart
 max_exceeded: silent
