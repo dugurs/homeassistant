@@ -3,7 +3,7 @@ blueprint:
   source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/bodyscale_user_selector/bodyscale_user_selector.yaml
   name: "Body Scale User Selector"
   description: "측정된 체중을 비슷한 체중의 사용자로 선택해 업데이트 해 줍니다.\n
-    v1.4 2023-03-19\n
+    v1.4.1 2023-06-14\n
     ---\n
     input_number 사용자 센서 생성 규칙.\n
     - 사용자 체중 센서명에는 weight가 들어가야 합니다.\n
@@ -71,7 +71,7 @@ blueprint:
       name: action
       description: "측정 후 액션\n
       사용가능 template\n
-      `{{weight}}`, `{{user}}`, `{{meas_status}}`"
+      `{{weight}}`, `{{user}}`, `{{guest}}`, `{{meas_status}}`"
       default: []
       selector:
         action: {}
@@ -102,6 +102,20 @@ variables:
       {% endif %}
     {% endfor %}
     {{ r.user }}
+  user: >-
+    {% set friendlyname = state_attr(user_weight_entity, "friendly_name") %}
+    {% if friendlyname %}
+      {{ friendlyname.split(" ")[0] }}
+    {% else %}
+      {{' '}}
+    {% endif %}
+  guest: >-
+    {% if 'guest' in user_weight_entity %}
+       손님
+    {% else %}
+      {{' '}}
+    {% endif %}
+
   use_impedance: '{{ impedance_entity != "" and states[weight_entity].last_updated.timestamp()|int == states[impedance_entity].last_updated.timestamp()|int }}'
   meas_status: >-
     {% if use_impedance %}
@@ -112,7 +126,6 @@ variables:
       안정
     {% endif %}
   user_impedance_entity: '{{ user_weight_entity.replace("weight","impedance") }}'
-  user: '{{ state_attr(user_weight_entity, "friendly_name") }}'
   on_weight: >-
     {# 체지방가 측정되었을때 는 계속 #}
     {% if use_impedance %}
@@ -131,7 +144,7 @@ condition:
   - condition: template
     value_template: '{{ weight >= min_weight }}'
   - condition: template
-    value_template: '{{ on_weight }}' 
+    value_template: '{{ on_weight }}'
 
 action:
   
