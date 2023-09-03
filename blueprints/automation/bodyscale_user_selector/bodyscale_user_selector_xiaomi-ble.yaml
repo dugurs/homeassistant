@@ -40,7 +40,7 @@ blueprint:
       selector:
         entity:
           domain: input_number
-          device_class: weight
+          # device_class: weight
           multiple: true
 
     weight_distinction:
