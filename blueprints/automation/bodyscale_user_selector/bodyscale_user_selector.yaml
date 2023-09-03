@@ -19,8 +19,17 @@ blueprint:
     5분이내 동일 체중 측정은 건너뛴니다.\n
     다중 체중센서 선택시, 측정후 체지방 측정이 아니면 15초동안 체중센서 트리거 대기 합니다."
 
-
   input:
+    ble_integration:
+      name: ble integration
+      description: ""
+      selector:
+        select:
+          options:
+            - label: "Xiaomi BLE"
+              value: xiaome_ble
+            - label: "Passive BLE monitor"
+              value: ble_monitor
     weight_entitys:
       name: weight sensor
       description: "체중 센서\n`weight`, `non_stabilized_weight`, `stabilized_weight`등 여러 체중센서를 선택해 줄 수 있습니다."
@@ -28,7 +37,7 @@ blueprint:
         entity:
           domain: sensor
           multiple: true
-          # device_class: weight
+          device_class: weight
 
     impedance_entity:
       name: impedance sensor (option)
@@ -81,6 +90,7 @@ trigger:
     entity_id: !input weight_entitys
 
 variables:
+  ble_integration: !input ble_integration
   weight_entitys: !input weight_entitys
   weight_entity: '{{trigger.entity_id}}'
   weight: "{{ states(weight_entity)|float }}"
@@ -111,18 +121,23 @@ variables:
     {% endif %}
   guest: >-
     {% if 'guest' in user_weight_entity %}
-       손님
+      손님
     {% else %}
       {{' '}}
     {% endif %}
 
-  use_impedance: '{{ impedance_entity != "" and states[weight_entity].last_updated.timestamp()|int == states[impedance_entity].last_updated.timestamp()|int }}'
+  use_impedance: >-
+    {% if ble_integration == 'ble_monitor' %}
+      {{ impedance_entity != "" and now().timestamp()-states[impedance_entity].last_updated.timestamp()<=3 and states[weight_entity].last_updated.timestamp()|int == states[impedance_entity].last_updated.timestamp()|int }}
+    {% elif ble_integration == 'xiaome_ble' %}
+      {{ impedance_entity != "" and now().timestamp()-states[impedance_entity].last_updated.timestamp()<=3 and states[impedance_entity].last_updated.timestamp() - states[weight_entity].last_updated.timestamp() <= 10 }}
+    {% endif %}
   meas_status: >-
     {% if use_impedance %}
       체지방
     {% elif weight_entity != weight_entity.replace("non_stabilized","@") %}
       불안정
-    {% elif weight_entity != weight_entity.replace("stabilized","@") %}
+    {% else %}
       안정
     {% endif %}
   user_impedance_entity: '{{ user_weight_entity.replace("weight","impedance") }}'
@@ -155,7 +170,9 @@ action:
       - wait_for_trigger:
           - platform: state
             entity_id: !input weight_entitys
-        timeout: '00:00:15'
+          - platform: state
+            entity_id: !input impedance_entity
+        timeout: '00:00:08'
         continue_on_timeout: true
       - delay: '00:00:01'
       
@@ -167,13 +184,15 @@ action:
 
   - if:
       - condition: template
-        value_template: '{{ use_impedance and states(impedance_entity) != "unknown" }}'
+        value_template: '{{ states(impedance_entity) != "unknown" and ( use_impedance or now().timestamp()-states[impedance_entity].last_updated.timestamp()<3 ) }}'
     then:
       - service: input_number.set_value
         target:
           entity_id: "{{user_impedance_entity}}"
         data:
           value: "{{ states(impedance_entity) }}"
+      - variables:
+          meas_status: 체지방
 
   - if:
       - condition: template
