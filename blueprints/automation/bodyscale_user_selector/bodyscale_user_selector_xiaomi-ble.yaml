@@ -13,8 +13,7 @@ blueprint:
     체중센서명에서 `weight`을 `impedance`로 치환 해 만들어야 합니다.\n
     예 : `input_number.userxxx_weight` -> `input_number.userxxx_impedance`\n
 
-    Xiaomi BLE는 측정값이 직전과 동일하면 트리거가 없습니다.\n
-    체중 측정후 impedance 측정 전까지 최대 20초동안 대기 합니다."
+    Xiaomi BLE는 측정값이 직전과 동일하면 트리거가 없습니다."
 
 
   input:
