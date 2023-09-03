@@ -3,7 +3,7 @@ blueprint:
   source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/bodyscale_user_selector/bodyscale_user_selector_xiaomi-ble.yaml
   name: "Body Scale User Selector (for Xiaomi BLE)"
   description: "측정된 체중을 비슷한 체중의 사용자로 선택해 업데이트 해 줍니다.\n
-    v1.1.0 2023-09-03\n
+    v1.1.1 2023-09-03\n
     ---\n
     input_number 사용자 센서 생성 규칙.\n
     - 사용자 체중 센서명에는 weight가 들어가야 합니다.\n
@@ -66,6 +66,17 @@ blueprint:
           step: 1
           unit_of_measurement: "kg"
 
+    wait_time:
+      name: impedance trigger waiting time
+      description: "체지방 측정 대기시간."
+      default: 10
+      selector:
+        number:
+          min: 5
+          max: 20
+          step: 1
+          unit_of_measurement: "seconds"
+
     on_action:
       name: action
       description: "측정 후 액션\n
@@ -87,6 +98,7 @@ variables:
   impedance_entity: !input impedance_entity
   user_entities: !input user_entities
   weight_distinction: !input weight_distinction
+  wait_time: !input wait_time
   on_action: !input on_action
   min_weight: !input min_weight
   user_weight_entity: >-
@@ -132,7 +144,8 @@ action:
       - wait_for_trigger:
           - platform: state
             entity_id: !input impedance_entity
-        timeout: '00:00:20'
+        timeout: 
+          seconds: "{{ wait_time }}"
         continue_on_timeout: true
 
   - service: input_number.set_value
