@@ -1,6 +1,6 @@
 blueprint:
   domain: automation
-  source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/bodyscale_user_selector/bodyscale_user_selector.yaml
+  source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/bodyscale_user_selector/bodyscale_user_selector_ble-monitor.yaml
   name: "Body Scale User Selector (for ble monitor)"
   description: "측정된 체중을 비슷한 체중의 사용자로 선택해 업데이트 해 줍니다.\n
     v1.4.1 2023-06-14\n
@@ -27,8 +27,9 @@ blueprint:
       selector:
         entity:
           domain: sensor
+          device_class: weight
+          integration: ble_monitor
           multiple: true
-          # device_class: weight
 
     impedance_entity:
       name: impedance sensor (option)
@@ -36,6 +37,7 @@ blueprint:
       selector:
         entity:
           domain: sensor
+          integration: ble_monitor
 
     user_entities:
       name: input_number Weight User entities
@@ -43,6 +45,7 @@ blueprint:
       selector:
         entity:
           domain: input_number
+          device_class: weight
           multiple: true
 
     weight_distinction:
