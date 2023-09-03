@@ -36,8 +36,8 @@ blueprint:
       selector:
         entity:
           domain: sensor
-          multiple: true
           device_class: weight
+          multiple: true
 
     impedance_entity:
       name: impedance sensor (option)
@@ -52,6 +52,7 @@ blueprint:
       selector:
         entity:
           domain: input_number
+          device_class: weight
           multiple: true
 
     weight_distinction:
