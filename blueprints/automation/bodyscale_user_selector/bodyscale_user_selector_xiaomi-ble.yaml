@@ -1,0 +1,164 @@
+blueprint:
+  domain: automation
+  source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/bodyscale_user_selector/bodyscale_user_selector_xiaomi-ble.yaml
+  name: "Body Scale User Selector (for Xiaomi BLE)"
+  description: "측정된 체중을 비슷한 체중의 사용자로 선택해 업데이트 해 줍니다.\n
+    v1.0.0 2023-09-03\n
+    ---\n
+    input_number 사용자 센서 생성 규칙.\n
+    - 사용자 체중 센서명에는 weight가 들어가야 합니다.\n
+    - 초기 체중은 직접입력 해주어야 합니다.\n
+    - `input_number.guest_weight`과 같이 센서명에 `guest`가 들어간 손님용도 만들어야 합니다.\n
+    - impedance를 사용하려면, 센서명을\n
+    체중센서명에서 `weight`을 `impedance`로 치환 해 만들어야 합니다.\n
+    예 : `input_number.userxxx_weight` -> `input_number.userxxx_impedance`\n
+
+    Xiaomi BLE는 측정값이 직전과 동일하면 트리거가 없습니다.\n
+    체중 측정후 impedance 측정 전까지 최대 20초동안 대기 합니다."
+
+
+  input:
+    weight_entity:
+      name: Weight(Mass) sensor
+      description: "체중 센서"
+      selector:
+        entity:
+          domain: sensor
+          integration: xiaomi_ble
+          device_class: weight
+
+    impedance_entity:
+      name: impedance sensor (option)
+      description: "인피던스 센서 (선택사항)"
+      selector:
+        entity:
+          domain: sensor
+          integration: xiaomi_ble
+
+    user_entities:
+      name: input_number Weight User entities
+      description: "생성한 사용자 체중을 선택 해 주세요.\n손님 체중도 선택 해야 합니다."
+      selector:
+        entity:
+          domain: input_number
+          device_class: weight
+          multiple: true
+
+    weight_distinction:
+      name: weight distinction
+      description: "사용사 선택 기준의 몸무게 오차율\n오차이내의 사용자가 없으면 손님으로 인식됩니다."
+      default: 5.5
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 0.1
+          unit_of_measurement: "%"
+
+    min_weight:
+      name: min weight
+      description: "인식 최소 체중."
+      default: 20
+      selector:
+        number:
+          min: 10
+          max: 40
+          step: 1
+          unit_of_measurement: "kg"
+
+    on_action:
+      name: action
+      description: "측정 후 액션\n
+      사용가능 template\n
+      `{{weight}}`, `{{user}}`, `{{guest}}`, `{{meas_status}}`"
+      default: []
+      selector:
+        action: {}
+
+trigger:
+  - platform: state
+    entity_id: !input weight_entity
+
+variables:
+  weight_entity: !input weight_entity
+  weight: "{{ states(weight_entity)|float }}"
+  impedance_entity: !input impedance_entity
+  user_entities: !input user_entities
+  weight_distinction: !input weight_distinction
+  on_action: !input on_action
+  min_weight: !input min_weight
+  user_weight_entity: >-
+    {% set r = namespace(user='') %}
+    {% set r.dist = 1 %}
+    {% for user_entity in user_entities %}
+      {% set dist = (states(user_entity)|float / weight - 1)|abs %}
+      {% if 'guest' in user_entity and r.user == '' %}
+        {% set r.user = user_entity %}
+      {% elif dist < weight_distinction / 100 and r.dist > dist %}
+        {% set r.user = user_entity %}
+        {% set r.dist = dist %}
+      {% endif %}
+    {% endfor %}
+    {{ r.user }}
+  user: >-
+    {% set friendlyname = state_attr(user_weight_entity, "friendly_name") %}
+    {% if friendlyname %}
+      {{ friendlyname.split(" ")[0] }}
+    {% else %}
+      {{' '}}
+    {% endif %}
+  guest: >-
+    {% if 'guest' in user_weight_entity %}
+      손님
+    {% else %}
+      {{' '}}
+    {% endif %}
+  user_impedance_entity: '{{ user_weight_entity.replace("weight","impedance") }}'
+
+condition:
+  - condition: template
+    value_template: '{{ weight >= min_weight }}'
+
+action:
+  - alias: "Set variables"
+    variables:
+      meas_status: ''
+  - if:
+      - condition: template
+        value_template: '{{ states(impedance_entity) != "unknown" }}'
+    then:
+      - wait_for_trigger:
+          - platform: state
+            entity_id: !input impedance_entity
+        timeout: '00:00:20'
+        continue_on_timeout: true
+      - delay: 00:00:00.5000
+      - if:
+          - condition: template
+            value_template: "{{ states(impedance_entity)|int(0) > 0 and states[impedance_entity].last_updated.timestamp()|int(0) > states[weight_entity].last_updated.timestamp()|int(0) }}"
+        then:
+          - alias: "Set variables"
+            variables:
+              meas_status: '체지방'
+          - service: input_number.set_value
+            target:
+              entity_id: "{{user_impedance_entity}}"
+            data:
+              value: "{{ states(impedance_entity) }}"
+
+  - service: input_number.set_value
+    target:
+      entity_id: "{{user_weight_entity}}"
+    data:
+      value: "{{ trigger.to_state.state }}"
+
+  - if:
+      - condition: template
+        value_template: '{{ on_action | length > 0 }}'
+    then:
+      - choose:
+          - conditions: []
+            sequence: !input on_action
+
+mode: single
+max_exceeded: silent

@@ -1,0 +1,187 @@
+blueprint:
+  domain: automation
+  source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/bodyscale_user_selector/bodyscale_user_selector.yaml
+  name: "Body Scale User Selector (for ble monitor)"
+  description: "측정된 체중을 비슷한 체중의 사용자로 선택해 업데이트 해 줍니다.\n
+    v1.4.1 2023-06-14\n
+    ---\n
+    input_number 사용자 센서 생성 규칙.\n
+    - 사용자 체중 센서명에는 weight가 들어가야 합니다.\n
+    - 초기 체중은 직접입력 해주어야 합니다.\n
+    - `input_number.guest_weight`과 같이 센서명에 `guest`가 들어간 손님용도 만들어야 합니다.\n
+    - impedance를 사용하려면, 센서명을\n
+    체중센서명에서 `weight`을 `impedance`로 치환 해 만들어야 합니다.\n
+    예 : `input_number.userxxx_weight` -> `input_number.userxxx_impedance`\n
+
+    사오미 체중계 기준으로\n
+    센서명이 non_stabilized_weight 불안정, stabilized_weight 안정, weight + impedance는 체지방 측정입니다.\n
+    체지방 측정후 5분이네 안정,불안정 측정은 건너뜁니다.\n
+    5분이내 동일 체중 측정은 건너뛴니다.\n
+    다중 체중센서 선택시, 측정후 체지방 측정이 아니면 15초동안 체중센서 트리거 대기 합니다."
+
+
+  input:
+    weight_entitys:
+      name: weight sensor
+      description: "체중 센서\n`weight`, `non_stabilized_weight`, `stabilized_weight`등 여러 체중센서를 선택해 줄 수 있습니다."
+      selector:
+        entity:
+          domain: sensor
+          multiple: true
+          # device_class: weight
+
+    impedance_entity:
+      name: impedance sensor (option)
+      description: "인피던스 센서 (선택사항)"
+      selector:
+        entity:
+          domain: sensor
+
+    user_entities:
+      name: input_number Weight User entities
+      description: "생성한 사용자 체중을 선택 해 주세요.\n손님 체중도 선택 해야 합니다."
+      selector:
+        entity:
+          domain: input_number
+          multiple: true
+
+    weight_distinction:
+      name: weight distinction
+      description: "사용사 선택 기준의 몸무게 오차율\n오차이내의 사용자가 없으면 손님으로 인식됩니다."
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 0.1
+          unit_of_measurement: "%"
+
+    min_weight:
+      name: min weight
+      description: "인식 최소 체중."
+      default: 20
+      selector:
+        number:
+          min: 10
+          max: 40
+          step: 1
+          unit_of_measurement: "kg"
+
+    on_action:
+      name: action
+      description: "측정 후 액션\n
+      사용가능 template\n
+      `{{weight}}`, `{{user}}`, `{{guest}}`, `{{meas_status}}`"
+      default: []
+      selector:
+        action: {}
+
+trigger:
+  - platform: state
+    entity_id: !input weight_entitys
+
+variables:
+  weight_entitys: !input weight_entitys
+  weight_entity: '{{trigger.entity_id}}'
+  weight: "{{ states(weight_entity)|float }}"
+  impedance_entity: !input impedance_entity
+  user_entities: !input user_entities
+  weight_distinction: !input weight_distinction
+  on_action: !input on_action
+  min_weight: !input min_weight
+  user_weight_entity: >-
+    {% set r = namespace(user='') %}
+    {% set r.dist = 1 %}
+    {% for user_entity in user_entities %}
+      {% set dist = (states(user_entity)|float / weight - 1)|abs %}
+      {% if 'guest' in user_entity and r.user == '' %}
+        {% set r.user = user_entity %}
+      {% elif dist < weight_distinction / 100 and r.dist > dist %}
+        {% set r.user = user_entity %}
+        {% set r.dist = dist %}
+      {% endif %}
+    {% endfor %}
+    {{ r.user }}
+  user: >-
+    {% set friendlyname = state_attr(user_weight_entity, "friendly_name") %}
+    {% if friendlyname %}
+      {{ friendlyname.split(" ")[0] }}
+    {% else %}
+      {{' '}}
+    {% endif %}
+  guest: >-
+    {% if 'guest' in user_weight_entity %}
+      손님
+    {% else %}
+      {{' '}}
+    {% endif %}
+
+  use_impedance: '{{ impedance_entity != "" and states[weight_entity].last_updated.timestamp()|int == states[impedance_entity].last_updated.timestamp()|int }}'
+  meas_status: >-
+    {% if use_impedance %}
+      체지방
+    {% elif weight_entity != weight_entity.replace("non_stabilized","@") %}
+      불안정
+    {% elif weight_entity != weight_entity.replace("stabilized","@") %}
+      안정
+    {% endif %}
+  user_impedance_entity: '{{ user_weight_entity.replace("weight","impedance") }}'
+  on_weight: >-
+    {# 체지방가 측정되었을때 는 계속 #}
+    {% if use_impedance %}
+      {{true}}
+    {# 측정 체중이 5분이내 체중과 동일하면 건너 뛰기 #}
+    {% elif states(weight_entity)|float == states(user_weight_entity)|float and now().timestamp()|int - states[user_weight_entity].last_updated.timestamp()|int <= 300 %}
+      {{false}}
+    {# 같은 사용자의 체지방 측정후 5분 이내면 건너 뛰기  #}
+    {% elif states[weight_entity].last_updated.timestamp()|int - states[user_impedance_entity].last_updated.timestamp()|int <= 300 %}
+      {{false}}
+    {% else %}
+      {{true}}
+    {% endif %}
+
+condition:
+  - condition: template
+    value_template: '{{ weight >= min_weight }}'
+  - condition: template
+    value_template: '{{ on_weight }}'
+
+action:
+  
+  - if:
+      - condition: template
+        value_template: '{{ weight_entitys|length > 1 and not use_impedance }}'
+    then:
+      - wait_for_trigger:
+          - platform: state
+            entity_id: !input weight_entitys
+        timeout: '00:00:15'
+        continue_on_timeout: true
+      - delay: '00:00:01'
+      
+  - service: input_number.set_value
+    target:
+      entity_id: "{{user_weight_entity}}"
+    data:
+      value: "{{ trigger.to_state.state }}"
+
+  - if:
+      - condition: template
+        value_template: '{{ use_impedance and states(impedance_entity) != "unknown" }}'
+    then:
+      - service: input_number.set_value
+        target:
+          entity_id: "{{user_impedance_entity}}"
+        data:
+          value: "{{ states(impedance_entity) }}"
+
+  - if:
+      - condition: template
+        value_template: '{{ on_action | length > 0 }}'
+    then:
+      - choose:
+          - conditions: []
+            sequence: !input on_action
+
+mode: restart
+max_exceeded: silent
