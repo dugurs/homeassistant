@@ -1,6 +1,6 @@
 blueprint:
   name: "Xiaomi FP1 region sensor"
-  description: "1.1"
+  description: "1.3"
   domain: automation
 
   input:
@@ -15,12 +15,6 @@ blueprint:
       selector:
         entity:
           domain: sensor
-    input_boolean:
-      name: "input boolean"
-      description: "set state"
-      selector:
-        entity:
-          domain: input_boolean
     region:
       name: "region id"
       description: "region upsert id"
@@ -29,6 +23,28 @@ blueprint:
         number:
           min: 1
           max: 10
+    target_device:
+      name: "target device"
+      description: ""
+      selector:
+        entity:
+          domain:
+            - switch
+            - light
+            - fan
+            - input_boolean
+    auto_on_time_after:
+      name: 켜기 자동화 사용 시작 시간
+      description: "부터\n 끝 시간 보다 클 수 없습니다."
+      default: "6:30:00"
+      selector:
+        time: {}
+    auto_on_time_before:
+      name: 켜기 자동화 사용 끝 시간
+      description: "까지\n 시작 시간 보다 작을 수 없습니다."
+      default: "21:00:00"
+      selector:
+        time: {}
 
 trigger_variables:
   presence: !input presence
@@ -38,10 +54,12 @@ trigger:
     id: taction
   - platform: template
     value_template: "{{ states[presence].state == 'off' }}"
-    id: tpresence
+    id: tpresence_off
 
 variables:
   region: !input region
+  target_device: !input target_device
+  target_damain: "{{ target_device.split('.')[0] }}"
 
 condition:
   - condition: template
@@ -63,21 +81,26 @@ action:
               - condition: template
                 value_template: "{{ tostate.split('_')[2] in ['occupied', 'enter'] }}"
             then:
-              - service: input_boolean.turn_on
-                target:
-                  entity_id: !input input_boolean
+              - if:
+                  - condition: time
+                    after: !input auto_on_time_after
+                    before: !input auto_on_time_before
+                then:
+                  - service: "{{target_damain}}.turn_on"
+                    target:
+                      entity_id: !input target_device
             else:
               - delay: 00:00:03
-              - service: input_boolean.turn_off
+              - service: "{{target_damain}}.turn_off"
                 target:
-                  entity_id: !input input_boolean
+                  entity_id: !input target_device
       - conditions:
           - condition: trigger
-            id: tpresence
+            id: tpresence_off
         sequence:
-          - service: input_boolean.turn_off
+          - service: "{{target_damain}}.turn_off"
             target:
-              entity_id: !input input_boolean
+              entity_id: !input target_device
     default: []
 
 mode: restart

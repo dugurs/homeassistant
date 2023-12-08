@@ -1,13 +1,13 @@
 blueprint:
   source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/humidifier_switch_control/humidifier_switch_control.yaml
-  name: 가습기 스위치 제어
+  name: 가(제)습기 스위치 제어
   description:
-    "습도 설정이 불가능한 가습기나, USB 가습기 제어용.\n v1.3\n ---------\n 필요 구성요소는
+    "습도 설정이 불가능한 가(제)습기 제어용.\n v2.0\n ---------\n 필요 구성요소는
     switch 또는 humidifier 그리고 humidity sensor 입니다.\n 밤, 낮으로 구분하여 켜기 끄기 습도를 설정 할수 있습니다."
   domain: automation
   input:
     humidity_switch:
-      name: 가습기 스위치
+      name: 가(제)습기 스위치
       description: switch 또는 humidifier 선택
       selector:
         entity:
@@ -15,6 +15,16 @@ blueprint:
             - switch
             - humidifier
           multiple: false
+    device_type:
+      name: 장치 타입
+      description: ""
+      default: 가습기
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - 가습기
+            - 제습기
     humidity_sensor:
       name: 습도 센서
       description: ""
@@ -33,10 +43,10 @@ blueprint:
             - door
             - window
           multiple: true
-    day_humidity_on:
-      name: 낮에 켜기 습도
+    day_humidity_target:
+      name: 낮 목표 습도
       description: 낮 시간에 설정 습도 이하면 스위치를 켭니다
-      default: 47
+      default: 50
       selector:
         number:
           min: 40.0
@@ -44,21 +54,10 @@ blueprint:
           unit_of_measurement: "%"
           mode: slider
           step: 1.0
-    day_humidity_off:
-      name: 낮에 끄기 습도
-      description: 낮 시간에 설정 습도 이상이면 스위치를 끕니다
-      default: 52
-      selector:
-        number:
-          min: 40.0
-          max: 70.0
-          unit_of_measurement: "%"
-          mode: slider
-          step: 1.0
-    night_humidity_on:
-      name: 밤에 켜기 습도
+    night_humidity_target:
+      name: 밤 목표 습도
       description: 밤 시간에 설정 습도 이하면 스위치를 켭니다
-      default: 52
+      default: 53
       selector:
         number:
           min: 40.0
@@ -66,14 +65,14 @@ blueprint:
           unit_of_measurement: "%"
           mode: slider
           step: 1.0
-    night_humidity_off:
-      name: 밤에 끄기 습도
-      description: 밤 시간에 설정 습도 이상이면 스위치를 끕니다
-      default: 57
+    target_tolerance:
+      name: 목표 습도 공차
+      description: 목표 습도 60%, 공차 1% 설정시 59%, 61%에서 트리거
+      default: 2
       selector:
         number:
-          min: 40.0
-          max: 70.0
+          min: 1.0
+          max: 10.0
           unit_of_measurement: "%"
           mode: slider
           step: 1.0
@@ -91,25 +90,37 @@ blueprint:
         time: {}
 
 trigger:
-  - platform: homeassistant
-    event: start
-  - platform: time
-    at: !input day_time_after
-  - platform: time
-    at: !input day_time_before
-  - platform: state
-    entity_id: !input humidity_sensor
   - platform: state
     entity_id: !input door_sensor
+  - platform: time_pattern
+    minutes: /1
+    id: timePattern
 
 variables:
   humidity_switch: !input humidity_switch
+  device_type: !input device_type
+  humidity_sensor: !input humidity_sensor
   door_sensor: !input door_sensor
+  day_humidity_target: !input day_humidity_target
+  night_humidity_target: !input night_humidity_target
+  target_tolerance: !input target_tolerance
+  day_time_after: !input day_time_after
+  day_time_before: !input day_time_before
   switch_domain: "{{ humidity_switch.split('.')[0] }}"
   door_open: "{{ expand(door_sensor) | selectattr('state', 'eq', 'on') | list | count }}"
+  target_humidity: "{{ iif( today_at(day_time_after) <= now() and today_at(day_time_before) >= now() , day_humidity_target|float, night_humidity_target|float) }}"
+  humidity1: "{{ states(humidity_sensor)|float }}"
+  onoff: >-
+    {% if (humidity1 - target_humidity)|abs >= target_tolerance|float %} # 목표온도 +- 공차 값보다 크면
+      {% if humidity1 - target_humidity > 0 %} # 습도가 높고, 가습기면 끄고 제습기면 켜고 
+        {{ iif (device_type == '가습기' , 'off', 'on') }}
+      {% else %} # 습도가 낮고, 가습기면 켜고, 제습기면 끄고
+        {{ iif (device_type == '가습기' , 'on', 'off') }}
+      {% endif %}
+    {% endif %}
 
 action:
-  - if:
+  - if: # 도어센서기 있고 열려있으면
       - condition: template
         value_template: "{{ door_sensor | count > 0 }}"
       - condition: template
@@ -121,63 +132,29 @@ action:
         target:
           entity_id: !input humidity_switch
     else:
-      - if:
-          - condition: time
-            after: !input day_time_after
-            before: !input day_time_before
-        then:
-          - choose:
-              - conditions:
-                  - condition: numeric_state
-                    entity_id: !input humidity_sensor
-                    above: !input day_humidity_off
-                  - condition: state
-                    state: "on"
-                    entity_id: !input humidity_switch
-                sequence:
-                  - service: "{{switch_domain}}.turn_off"
-                    data: {}
-                    target:
-                      entity_id: !input humidity_switch
-              - conditions:
-                  - condition: numeric_state
-                    entity_id: !input humidity_sensor
-                    below: !input day_humidity_on
-                  - condition: state
-                    state: "off"
-                    entity_id: !input humidity_switch
-                sequence:
-                  - service: "{{switch_domain}}.turn_on"
-                    data: {}
-                    target:
-                      entity_id: !input humidity_switch
-            default: []
-        else:
-          - choose:
-              - conditions:
-                  - condition: numeric_state
-                    entity_id: !input humidity_sensor
-                    above: !input night_humidity_off
-                  - condition: state
-                    entity_id: !input humidity_switch
-                    state: "on"
-                sequence:
-                  - service: "{{switch_domain}}.turn_off"
-                    data: {}
-                    target:
-                      entity_id: !input humidity_switch
-              - conditions:
-                  - condition: numeric_state
-                    entity_id: !input humidity_sensor
-                    below: !input night_humidity_on
-                  - condition: state
-                    state: "off"
-                    entity_id: !input humidity_switch
-                sequence:
-                  - service: "{{switch_domain}}.turn_on"
-                    data: {}
-                    target:
-                      entity_id: !input humidity_switch
-            default: []
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ onoff == 'on' }}"
+              - condition: state
+                state: "off"
+                entity_id: !input humidity_switch
+            sequence:
+              - service: "{{switch_domain}}.turn_on"
+                data: {}
+                target:
+                  entity_id: !input humidity_switch
+          - conditions:
+              - condition: template
+                value_template: "{{ onoff == 'off' }}"
+              - condition: state
+                state: "on"
+                entity_id: !input humidity_switch
+            sequence:
+              - service: "{{switch_domain}}.turn_off"
+                data: {}
+                target:
+                  entity_id: !input humidity_switch
+        default: []
 mode: restart
 max_exceeded: silent
