@@ -107,14 +107,18 @@ variables:
   day_time_after: !input day_time_after
   day_time_before: !input day_time_before
   switch_domain: "{{ humidity_switch.split('.')[0] }}"
+  switch_state: "{{ states(humidity_switch) }}"
   door_open: "{{ expand(door_sensor) | selectattr('state', 'eq', 'on') | list | count }}"
   target_humidity: "{{ iif( today_at(day_time_after) <= now() and today_at(day_time_before) >= now() , day_humidity_target|float, night_humidity_target|float) }}"
   humidity1: "{{ states(humidity_sensor)|float }}"
+  # 목표온도 +- 공차 값보다 크면
+  # 습도가 높고, 가습기면 끄고, 제습기면 켜고
+  # 습도가 낮고, 가습기면 켜고, 제습기면 끄고
   onoff: >-
-    {% if (humidity1 - target_humidity)|abs >= target_tolerance|float %} # 목표온도 +- 공차 값보다 크면
-      {% if humidity1 - target_humidity > 0 %} # 습도가 높고, 가습기면 끄고 제습기면 켜고 
+    {% if (humidity1 - target_humidity)|abs >= target_tolerance|float %}
+      {% if humidity1 - target_humidity > 0 %} 
         {{ iif (device_type == '가습기' , 'off', 'on') }}
-      {% else %} # 습도가 낮고, 가습기면 켜고, 제습기면 끄고
+      {% else %} 
         {{ iif (device_type == '가습기' , 'on', 'off') }}
       {% endif %}
     {% endif %}
@@ -128,33 +132,36 @@ action:
     then:
       - delay: "00:00:10"
       - service: "{{switch_domain}}.turn_off"
-        data: {}
         target:
           entity_id: !input humidity_switch
     else:
       - choose:
           - conditions:
               - condition: template
-                value_template: "{{ onoff == 'on' }}"
+                value_template: '{{ onoff == "on" }}'
               - condition: state
                 state: "off"
                 entity_id: !input humidity_switch
             sequence:
               - service: "{{switch_domain}}.turn_on"
-                data: {}
                 target:
                   entity_id: !input humidity_switch
           - conditions:
               - condition: template
-                value_template: "{{ onoff == 'off' }}"
+                value_template: '{{ onoff == "off" }}'
               - condition: state
                 state: "on"
                 entity_id: !input humidity_switch
             sequence:
               - service: "{{switch_domain}}.turn_off"
-                data: {}
                 target:
                   entity_id: !input humidity_switch
-        default: []
+        default:
+          []
+          # - service: system_log.write
+          #   data:
+          #     message: "1) onoff: {{ onoff }}, switch_state:{{switch_state}}, switch_domain:{{ switch_domain }}"
+          #     level: warning
+          #     logger: blueprint.humidifier_switch_control
 mode: restart
 max_exceeded: silent
