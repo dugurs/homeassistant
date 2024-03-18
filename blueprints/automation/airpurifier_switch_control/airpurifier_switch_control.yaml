@@ -1,7 +1,7 @@
 blueprint:
   source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/airpurifier_switch_control/airpurifier_switch_control.yaml
   name: 공기청정기 스위치 제어
-  description: "공기청정기 제어용.\n v1.0\n ---------\n 필요 구성요소는
+  description: "공기청정기 제어용.\n v1.01\n ---------\n 필요 구성요소는
     switch 또는 fan 그리고 sensor 입니다."
   domain: automation
   input:
@@ -23,7 +23,7 @@ blueprint:
           multiple: false
     air1_day_target:
       name: 센서1 낮 목표 수치
-      description: "예: PM2.5 좋음 15, 보통 35, 나쁨 75, 매우나쁨 500"
+      description: ""
       default: 15
       selector:
         number:
@@ -150,7 +150,12 @@ variables:
         {{ iif (air2_state > air2_target, 'on', 'off') }} 
       {% endif %}
     {% endif %}
-  switch_onoff: "{{ iif (night_off, 'off', iif (air1_onoff == 'on' or air2_onoff == 'on', 'on', 'off')) }}"
+  switch_onoff: >-
+    {% if night_off or (air1_onoff == 'off' and air2_onoff == 'off') %}
+      off
+    {% elif air1_onoff == 'on' or air2_onoff == 'on' %}
+      on
+    {% endif %}
 
 action:
   - if: # 도어센서기 있고 열려있으면
