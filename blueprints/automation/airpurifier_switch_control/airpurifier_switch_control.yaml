@@ -1,0 +1,196 @@
+blueprint:
+  source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/airpurifier_switch_control/airpurifier_switch_control.yaml
+  name: 공기청정기 스위치 제어
+  description: "공기청정기 제어용.\n v1.0\n ---------\n 필요 구성요소는
+    switch 또는 fan 그리고 sensor 입니다."
+  domain: automation
+  input:
+    airpurifier_switch:
+      name: 공기청정기 스위치
+      description: switch 또는 fan 선택
+      selector:
+        entity:
+          domain:
+            - switch
+            - fan
+          multiple: false
+    air1_sensor:
+      name: 센서1
+      description: "예: PM2.5, PM10, CO2"
+      selector:
+        entity:
+          domain: sensor
+          multiple: false
+    air1_day_target:
+      name: 센서1 낮 목표 수치
+      description: "예: PM2.5 좋음 15, 보통 35, 나쁨 75, 매우나쁨 500"
+      default: 15
+      selector:
+        number:
+          min: 0
+          mode: box
+          step: 1
+    air1_night_target:
+      name: 센서1 밤 목표 수치
+      description: "0 설정시 off"
+      default: 30
+      selector:
+        number:
+          min: 0
+          mode: box
+          step: 1
+    air1_target_tolerance:
+      name: 센서1 목표 공차
+      description: 목표 먼지 15, 공차 10 설정시 5에서 off, 25에서 on 트리거
+      default: 10
+      selector:
+        number:
+          min: 1
+          mode: box
+          step: 1
+    air2_sensor:
+      name: 센서2
+      description: "센서1만 사용시 센서2를 센서1과 같은 센서로 선택해 주세요.(센서2 설정은 무시됩니다.)"
+      selector:
+        entity:
+          domain: sensor
+          multiple: false
+    air2_day_target:
+      name: 센서2 낮 목표 수치
+      description: ""
+      default: 15
+      selector:
+        number:
+          min: 0
+          mode: box
+          step: 1
+    air2_night_target:
+      name: 센서2 밤 목표 수치
+      description: ""
+      default: 30
+      selector:
+        number:
+          min: 0
+          mode: box
+          step: 1
+    air2_target_tolerance:
+      name: 센서2 목표 공차
+      default: 10
+      selector:
+        number:
+          min: 1
+          mode: box
+          step: 1
+    door_sensor:
+      name: 도어 센서
+      description: "문이 열리면 10초후에 스위치를 끕니다."
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class:
+            - door
+            - window
+          multiple: true
+    day_time_after:
+      name: 낮 시작 시간
+      description: 부터
+      default: "8:00:00"
+      selector:
+        time: {}
+    day_time_before:
+      name: 낮 끝 시간
+      description: 까지
+      default: "21:00:00"
+      selector:
+        time: {}
+
+trigger:
+  - platform: state
+    entity_id: !input door_sensor
+  - platform: time_pattern
+    minutes: /1
+    id: timePattern
+
+variables:
+  airpurifier_switch: !input airpurifier_switch
+  air1_sensor: !input air1_sensor
+  air2_sensor: !input air2_sensor
+  door_sensor: !input door_sensor
+  air1_day_target: !input air1_day_target
+  air1_night_target: !input air1_night_target
+  air2_day_target: !input air2_day_target
+  air2_night_target: !input air2_night_target
+  air1_target_tolerance: !input air1_target_tolerance
+  air2_target_tolerance: !input air2_target_tolerance
+  day_time_after: !input day_time_after
+  day_time_before: !input day_time_before
+  air1_target: "{{ iif( today_at(day_time_after) <= now() and today_at(day_time_before) >= now() , air1_day_target|float, air1_night_target|float) }}"
+  air2_target: "{{ iif( today_at(day_time_after) <= now() and today_at(day_time_before) >= now() , air2_day_target|float, air2_night_target|float) }}"
+  switch_domain: "{{ airpurifier_switch.split('.')[0] }}"
+  switch_state: "{{ states(airpurifier_switch) }}"
+  door_open: "{{ expand(door_sensor) | selectattr('state', 'eq', 'on') | list | count }}"
+  air1_state: "{{ states(air1_sensor)|float }}"
+  air2_state: "{{ states(air2_sensor)|float }}"
+  night_off: "{{ not (today_at(day_time_after)<= now() and today_at(day_time_before) >= now()) and air1_night_target == 0 }}"
+  # 목표온도 +- 공차 값보다 크면
+  # 수치가 높으면 켜고
+  # 수치가 낮으면 끄고
+  # 상태: 10, 목표: 15, 공차 10 == ''
+  # 상태: 4, 목표: 15, 공차 10 == 'off'
+  # 상태: 30, 목표: 15, 공차 10 == 'on'
+  air1_onoff: >-
+    {% if (air1_state - air1_target)|abs >= air1_target_tolerance|float %}
+      {{ iif (air1_state > air1_target, 'on', 'off') }} 
+    {% endif %}
+  air2_onoff: >-
+    {% if air1_sensor == air2_sensor %}
+      off
+    {% else %}
+      {% if (air2_state - air2_target)|abs >= air2_target_tolerance|float %}
+        {{ iif (air2_state > air2_target, 'on', 'off') }} 
+      {% endif %}
+    {% endif %}
+  switch_onoff: "{{ iif (night_off, 'off', iif (air1_onoff == 'on' or air2_onoff == 'on', 'on', 'off')) }}"
+
+action:
+  - if: # 도어센서기 있고 열려있으면
+      - condition: template
+        value_template: "{{ door_sensor | count > 0 }}"
+      - condition: template
+        value_template: "{{ door_open > 0 }}"
+    then:
+      - delay: "00:00:10"
+      - service: "{{switch_domain}}.turn_off"
+        target:
+          entity_id: !input airpurifier_switch
+    else:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: '{{ switch_onoff == "on" }}'
+              - condition: state
+                state: "off"
+                entity_id: !input airpurifier_switch
+            sequence:
+              - service: "{{switch_domain}}.turn_on"
+                target:
+                  entity_id: !input airpurifier_switch
+          - conditions:
+              - condition: template
+                value_template: '{{ switch_onoff == "off" }}'
+              - condition: state
+                state: "on"
+                entity_id: !input airpurifier_switch
+            sequence:
+              - service: "{{switch_domain}}.turn_off"
+                target:
+                  entity_id: !input airpurifier_switch
+        default:
+          # []
+          # - service: system_log.write
+          #   data:
+          #     message: "1) switch_onoff: {{ onoff }}, switch_state:{{switch_state}}, switch_domain:{{ switch_domain }}"
+          #     level: warning
+          #     logger: blueprint.airpurifier_switch_control
+mode: restart
+max_exceeded: silent
