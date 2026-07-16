@@ -2,7 +2,7 @@ blueprint:
   domain: automation
   source_url: https://github.com/dugurs/homeassistant/blob/main/blueprints/automation/toilet_fan_auto2/toilet_fan_auto2.yaml
   name: "화장실 환풍기 자동 2"
-  description: "v2.3\n
+  description: "v2.4\n
   ----------\n
   기본동작은 (최대가동시간0, 최소가동시간0, 최소가동시간기준0 일때)\n
   - 등을 켜면 팬이 무조건 켜지고\n
@@ -40,6 +40,31 @@ blueprint:
         entity:
           domain: sensor
           device_class: humidity
+    toilet_door:
+      name: "화장실 문 센서"
+      description: "화장실 문 개폐 감지 센서 (선택 사항. 설정 시 문이 열리면 환풍기가 즉시 꺼지고 닫히면 가동됩니다.)"
+      default: []
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: door
+    door_open_off_immediately:
+      name: "문 열림 시 즉시 끄기"
+      description: "화장실 문이 열리면 환풍기를 즉시 끌지 여부를 선택합니다."
+      default: true
+      selector:
+        boolean:
+    fan_on_with_light:
+      name: "등 켜질 때 환풍기 작동 조건"
+      description: "화장실 등이 켜질 때 환풍기가 작동할 조건을 선택합니다."
+      default: always
+      selector:
+        select:
+          options:
+            - label: "항상 켜기"
+              value: always
+            - label: "습도가 높을 때만 켜기"
+              value: humidity
     trigger_over_humidity:
       name: "환풍기 자동 켜기 끄기 기준 습도"
       description: "화장실 습도가 설정습도 이상 일때 자동으로 환풍기가 켜집니다. (and 켜기 습도차 만족시)\n
@@ -143,6 +168,14 @@ trigger:
   - platform: time_pattern # 1분 마다
     minutes: /1
     id: timePattern
+  - platform: state
+    entity_id: !input toilet_door
+    to: "on"
+    id: doorOpen
+  - platform: state
+    entity_id: !input toilet_door
+    to: "off"
+    id: doorClosed
 
 variables:
   toilet_fan: !input toilet_fan
@@ -157,18 +190,72 @@ variables:
   fan_off_time_min_if: !input fan_off_time_min_if
   fan_auto_on_time_after: !input fan_auto_on_time_after
   fan_auto_on_time_before: !input fan_auto_on_time_before
+  toilet_door: !input toilet_door
+  door_open_off_immediately: !input door_open_off_immediately
+  fan_on_with_light: !input fan_on_with_light
+  door_closed_or_none: "{{ toilet_door in [none, '', [], 'none', 'unknown', 'unavailable'] or is_state(toilet_door, 'off') }}"
 
 action:
   - choose:
-      # 등 켜면, 환풍기 켜기 (팬이 꺼져있을때)
+      # 등 켜면, 환풍기 켜기 (팬이 꺼져있을때, 문이 닫혀있거나 문 센서가 없을때, 설정한 켜기 조건 만족시)
       - conditions:
           - condition: trigger
             id: lightOn
           - condition: state
             entity_id: !input toilet_fan
             state: "off"
+          - condition: template
+            value_template: >-
+              {{
+                door_closed_or_none
+                and (
+                  fan_on_with_light == 'always'
+                  or (
+                    states(humidity_in) | float(0) >= trigger_over_humidity
+                    and (states(humidity_in) | float(0)) - (states(humidity_out) | float(0)) >= fan_on_humidity
+                  )
+                )
+              }}
         sequence:
           - service: fan.turn_on
+            target:
+              entity_id: !input toilet_fan
+
+      # 문 닫히면 환풍기 켜기 (등이 켜져있고 팬이 꺼져있을때, 설정한 켜기 조건 만족시)
+      - conditions:
+          - condition: trigger
+            id: doorClosed
+          - condition: state
+            entity_id: !input toilet_light
+            state: "on"
+          - condition: state
+            entity_id: !input toilet_fan
+            state: "off"
+          - condition: template
+            value_template: >-
+              {{
+                fan_on_with_light == 'always'
+                or (
+                  states(humidity_in) | float(0) >= trigger_over_humidity
+                  and (states(humidity_in) | float(0)) - (states(humidity_out) | float(0)) >= fan_on_humidity
+                )
+              }}
+        sequence:
+          - service: fan.turn_on
+            target:
+              entity_id: !input toilet_fan
+
+      # 문 열리면 환풍기 끄기 (팬이 켜져있고 즉시 끄기 활성화 시)
+      - conditions:
+          - condition: trigger
+            id: doorOpen
+          - condition: state
+            entity_id: !input toilet_fan
+            state: "on"
+          - condition: template
+            value_template: "{{ door_open_off_immediately }}"
+        sequence:
+          - service: fan.turn_off
             target:
               entity_id: !input toilet_fan
 
@@ -180,9 +267,9 @@ action:
             entity_id: !input toilet_fan
             state: "on"
           - condition: template # 최소습도 이하 거나 외부습도차보다 낮을때
-            value_template: "{{ float(states[humidity_in].state) < trigger_over_humidity or float(states[humidity_in].state) - float(states[humidity_out].state) <= fan_off_humidity }}"
+            value_template: "{{ states(humidity_in) | float(0) < trigger_over_humidity or (states(humidity_in) | float(0)) - (states(humidity_out) | float(0)) <= fan_off_humidity }}"
           - condition: template # 최소가동시간이0 이거나, 팬 최소가동 조건 시간 보나 작을때
-            value_template: "{{ fan_off_time_min == 0 or ( now().timestamp() - trigger.from_state.last_changed.timestamp() ) / 60 < fan_off_time_min_if }}"
+            value_template: "{{ fan_off_time_min == 0 or (trigger.from_state is not none and ( now().timestamp() - trigger.from_state.last_changed.timestamp() ) / 60 < fan_off_time_min_if) }}"
         sequence:
           - service: fan.turn_off
             target:
@@ -196,7 +283,7 @@ action:
             entity_id: !input toilet_fan
             state: "on"
           - condition: template
-            value_template: "{{ float(states[humidity_in].state) < trigger_over_humidity or float(states[humidity_in].state) - float(states[humidity_out].state) <= fan_off_humidity }}"
+            value_template: "{{ states(humidity_in) | float(0) < trigger_over_humidity or (states(humidity_in) | float(0)) - (states(humidity_out) | float(0)) <= fan_off_humidity }}"
           - condition: template
             value_template: "{{ fan_off_time_min > 0 }}"
         sequence:
@@ -227,21 +314,59 @@ action:
               - changHumidtyOut
         sequence:
           - choose:
-              # 환풍기 켜기 (팬이 꺼져있고, 최소습도 이상이고 외부습도보다 높고)
+              # 화장실 사용 중 습도 상승 시 환풍기 켜기 (팬이 꺼져있고, 등이 켜져있고, 문이 닫혀있거나 문 센서가 없고, 습도가 기준치 이상일 때)
+              - conditions:
+                  - condition: state
+                    entity_id: !input toilet_fan
+                    state: "off"
+                  - condition: state
+                    entity_id: !input toilet_light
+                    state: "on"
+                  - condition: template
+                    value_template: "{{ door_closed_or_none }}"
+                  - condition: template
+                    value_template: "{{ states(humidity_in) | float(0) >= trigger_over_humidity }}"
+                  - condition: template
+                    value_template: "{{ (states(humidity_in) | float(0)) - (states(humidity_out) | float(0)) >= fan_on_humidity }}"
+                sequence:
+                  - service: fan.turn_on
+                    target:
+                      entity_id: !input toilet_fan
+
+              # 환풍기 켜기 (팬이 꺼져있고, 문이 닫혀있거나 문 센서가 없고, 최소습도 이상이고 외부습도보다 높고)
               - conditions:
                   - condition: state
                     entity_id: !input toilet_fan
                     state: "off"
                   - condition: template
-                    value_template: "{{ float(states[humidity_in].state) >= trigger_over_humidity }}"
+                    value_template: "{{ door_closed_or_none }}"
                   - condition: template
-                    value_template: "{{ float(states[humidity_in].state) - float(states[humidity_out].state) >= fan_on_humidity }}"
+                    value_template: "{{ states(humidity_in) | float(0) >= trigger_over_humidity }}"
+                  - condition: template
+                    value_template: "{{ (states(humidity_in) | float(0)) - (states(humidity_out) | float(0)) >= fan_on_humidity }}"
                   - condition: template
                     value_template: "{{ fan_off_time_max == 0 }}"
                   - condition: template
                     value_template: "{{ today_at(fan_auto_on_time_after) <= now() and today_at(fan_auto_on_time_before) >= now() }}"
                 sequence:
                   - service: fan.turn_on
+                    target:
+                      entity_id: !input toilet_fan
+
+              # 화장실 사용 중 습도가 낮아지면 환풍기 끄기 (팬이 켜져있고, 등이 켜져있고, 작동 조건이 습도 기준일 때, 습도가 낮을 때)
+              - conditions:
+                  - condition: state
+                    entity_id: !input toilet_fan
+                    state: "on"
+                  - condition: state
+                    entity_id: !input toilet_light
+                    state: "on"
+                  - condition: template
+                    value_template: "{{ fan_on_with_light == 'humidity' }}"
+                  - condition: template
+                    value_template: "{{ states(humidity_in) | float(0) < trigger_over_humidity or (states(humidity_in) | float(0)) - (states(humidity_out) | float(0)) <= fan_off_humidity }}"
+                sequence:
+                  - service: fan.turn_off
                     target:
                       entity_id: !input toilet_fan
 
@@ -254,7 +379,7 @@ action:
                     entity_id: !input toilet_light
                     state: "off"
                   - condition: template
-                    value_template: "{{ fan_off_time_max > 0 and ( now().timestamp() - states[toilet_fan].last_changed.timestamp() ) / 60 >= fan_off_time_max }}"
+                    value_template: "{{ fan_off_time_max > 0 and states[toilet_fan] is not none and ( now().timestamp() - states[toilet_fan].last_changed.timestamp() ) / 60 >= fan_off_time_max }}"
                 sequence:
                   - service: fan.turn_off
                     target:
@@ -269,9 +394,9 @@ action:
                     entity_id: !input toilet_light
                     state: "off"
                   - condition: template
-                    value_template: "{{ float(states[humidity_in].state) - float(states[humidity_out].state) <= fan_off_humidity }}"
+                    value_template: "{{ (states(humidity_in) | float(0)) - (states(humidity_out) | float(0)) <= fan_off_humidity }}"
                   - condition: template
-                    value_template: "{{ fan_off_time_min == 0 or ( states[toilet_light].last_changed.timestamp() - states[toilet_fan].last_changed.timestamp() ) / 60 <= fan_off_time_min_if }}"
+                    value_template: "{{ fan_off_time_min == 0 or (states[toilet_light] is not none and states[toilet_fan] is not none and ( states[toilet_light].last_changed.timestamp() - states[toilet_fan].last_changed.timestamp() ) / 60 <= fan_off_time_min_if) }}"
                 sequence:
                   - service: fan.turn_off
                     target:
@@ -286,9 +411,9 @@ action:
                     entity_id: !input toilet_light
                     state: "off"
                   - condition: template
-                    value_template: "{{ float(states[humidity_in].state) - float(states[humidity_out].state) <= fan_off_humidity }}"
+                    value_template: "{{ (states(humidity_in) | float(0)) - (states(humidity_out) | float(0)) <= fan_off_humidity }}"
                   - condition: template
-                    value_template: "{{ ( now().timestamp() - states[toilet_light].last_changed.timestamp() ) / 60 >= fan_off_time_min }}"
+                    value_template: "{{ states[toilet_light] is not none and ( now().timestamp() - states[toilet_light].last_changed.timestamp() ) / 60 >= fan_off_time_min }}"
                 sequence:
                   - service: fan.turn_off
                     target:
