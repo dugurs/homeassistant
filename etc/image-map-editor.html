@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>이미지 좌표 및 맵 영역 편집기</title>
+    <meta name="description" content="이미지 위에서 마우스 커서의 X, Y 좌표 실시간 추적 및 HTML map 사각 영역 생성/편집 도구" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+        rel="stylesheet" />
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg-primary: #0a0b0f;
+            --bg-secondary: #111218;
+            --bg-card: #16181f;
+            --bg-card-hover: #1c1f28;
+            --border: rgba(255, 255, 255, 0.07);
+            --border-accent: rgba(99, 102, 241, 0.5);
+            --text-primary: #f1f2f5;
+            --text-secondary: #8b8fa8;
+            --text-muted: #52556b;
+            --accent: #6366f1;
+            --accent-light: #818cf8;
+            --accent-glow: rgba(99, 102, 241, 0.25);
+            --green: #34d399;
+            --pink: #f472b6;
+            --yellow: #fbbf24;
+            --red: #ef4444;
+            --radius: 16px;
+            --radius-sm: 10px;
+        }
+
+        html,
+        body {
+            height: 100%;
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 60% 40% at 20% 10%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 50% at 80% 90%, rgba(244, 114, 182, 0.08) 0%, transparent 60%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .app {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 24px;
+            gap: 32px;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            animation: fadeDown 0.6s ease both;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--accent-glow);
+            border: 1px solid var(--border-accent);
+            color: var(--accent-light);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 5px 12px;
+            border-radius: 100px;
+            margin-bottom: 14px;
+        }
+
+        .badge-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent-light);
+            border-radius: 50%;
+            animation: pulse 2s ease infinite;
+        }
+
+        h1 {
+            font-size: clamp(26px, 4vw, 40px);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #f1f2f5 30%, var(--accent-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 15px;
+            font-weight: 400;
+        }
+
+        /* Upload zone */
+        .upload-zone {
+            width: 100%;
+            max-width: 680px;
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 52px 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--bg-card);
+            position: relative;
+            overflow: hidden;
+            animation: fadeUp 0.6s ease 0.1s both;
+        }
+
+        .upload-zone::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse 50% 60% at 50% 50%, var(--accent-glow), transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .upload-zone:hover,
+        .upload-zone.drag-over {
+            border-color: var(--accent);
+            background: var(--bg-card-hover);
+        }
+
+        .upload-zone:hover::before,
+        .upload-zone.drag-over::before {
+            opacity: 1;
+        }
+
+        .upload-icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 16px;
+            background: linear-gradient(135deg, var(--accent-glow), rgba(244, 114, 182, 0.1));
+            border: 1px solid var(--border-accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            transition: transform 0.3s ease;
+        }
+
+        .upload-zone:hover .upload-icon {
+            transform: scale(1.1) translateY(-2px);
+        }
+
+        .upload-title {
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .upload-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 18px;
+        }
+
+        .upload-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, var(--accent), #7c3aed);
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 10px 24px;
+            border-radius: 100px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.5);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        /* Main workspace */
+        .workspace {
+            width: 100%;
+            max-width: 1200px;
+            display: none;
+            grid-template-columns: 1fr 360px;
+            gap: 24px;
+            animation: fadeUp 0.5s ease both;
+        }
+
+        .workspace.visible {
+            display: grid;
+        }
+
+        /* Canvas side */
+        .canvas-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-width: 0;
+        }
+
+        /* Canvas wrapper */
+        .canvas-wrapper {
+            position: relative;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: crosshair;
+            min-height: 300px;
+            transition: border-color 0.2s ease;
+        }
+
+        .canvas-wrapper:hover {
+            border-color: var(--border-accent);
+        }
+
+        #imageCanvas {
+            display: block;
+            max-width: 100%;
+            max-height: 70vh;
+            object-fit: contain;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+        /* Sidebar controls */
+        .sidebar {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            height: fit-content;
+        }
+
+        .sidebar-section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .sidebar-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-left: 3px solid var(--accent);
+            padding-left: 8px;
+        }
+
+        /* Option Group (Units & Formats) */
+        .option-group {
+            display: flex;
+            background: var(--bg-secondary);
+            padding: 4px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+        }
+
+        .option-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 500;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .option-btn.active {
+            background: var(--bg-card-hover);
+            color: var(--accent-light);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Select list */
+        .area-list {
+            max-height: 180px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--bg-secondary);
+        }
+
+        .area-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.2s ease;
+            font-size: 13px;
+        }
+
+        .area-item:last-child {
+            border-bottom: none;
+        }
+
+        .area-item:hover {
+            background: var(--bg-card-hover);
+        }
+
+        .area-item.selected {
+            background: rgba(99, 102, 241, 0.15);
+            border-left: 3px solid var(--accent);
+        }
+
+        .area-color-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .delete-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .delete-btn:hover {
+            color: var(--red);
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .empty-list {
+            padding: 24px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        /* Coordinate Inputs Grid */
+        .coords-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .coord-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .coord-field label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .coord-field input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            outline: none;
+            transition: border-color 0.2s ease;
+        }
+
+        .coord-field input:focus {
+            border-color: var(--accent);
+        }
+
+        /* Instructions & Info */
+        .guide-box {
+            font-size: 12px;
+            color: var(--text-secondary);
+            background: rgba(251, 191, 36, 0.05);
+            border: 1px solid rgba(251, 191, 36, 0.15);
+            padding: 12px;
+            border-radius: var(--radius-sm);
+            line-height: 1.6;
+        }
+
+        .guide-box strong {
+            color: var(--yellow);
+        }
+
+        /* Toolbar */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar-left {
+            font-size: 13px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .img-info-badge {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary);
+        }
+
+        .toolbar-right {
+            display: flex;
+            gap: 8px;
+        }
+
+        .tool-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tool-btn:hover {
+            border-color: var(--border-accent);
+            color: var(--text-primary);
+            background: var(--bg-card-hover);
+        }
+
+        .tool-btn.primary {
+            background: linear-gradient(135deg, var(--accent), #7c3aed);
+            border-color: transparent;
+            color: white;
+            box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3);
+        }
+
+        .tool-btn.primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.45);
+        }
+
+        /* Copy flash */
+        .copy-flash {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(135deg, #34d399, #059669);
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 10px 20px;
+            border-radius: 100px;
+            box-shadow: 0 4px 20px rgba(52, 211, 153, 0.4);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .copy-flash.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Copy button container */
+        .copy-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .coords-preview-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-all;
+            min-height: 48px;
+        }
+
+        /* Animations */
+        @keyframes fadeDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: scale(0.85);
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+
+            .app {
+                padding: 24px 16px;
+                gap: 20px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+
+        <!-- Header -->
+        <header>
+            <div class="badge">
+                <span class="badge-dot"></span>
+                이미지 맵 & 좌표 편집기
+            </div>
+            <h1>이미지 맵 영역 및 좌표 추적</h1>
+            <p class="subtitle">드래그하여 영역을 생성하고 실시간 좌표 확인 및 수정이 가능합니다</p>
+        </header>
+
+        <!-- Upload zone -->
+        <div class="upload-zone" id="uploadZone">
+            <div class="upload-icon">🖼️</div>
+            <div class="upload-title">이미지를 여기에 드래그하거나</div>
+            <div class="upload-desc">PNG, JPG, GIF, WebP, SVG 지원</div>
+            <button class="upload-btn" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+                📂 파일 선택
+            </button>
+            <input type="file" id="fileInput" accept="image/*" onclick="event.stopPropagation()" />
+        </div>
+
+        <!-- Workspace -->
+        <div class="workspace" id="workspace">
+
+            <!-- Left Panel: Canvas -->
+            <div class="canvas-panel">
+                <!-- Toolbar -->
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <span class="img-info-badge" id="imgInfoBadge">—</span>
+                    </div>
+                    <div class="toolbar-right">
+                        <button class="tool-btn primary" onclick="document.getElementById('fileInput').click()">🔄 이미지
+                            변경</button>
+                    </div>
+                </div>
+
+                <!-- Canvas wrapper -->
+                <div class="canvas-wrapper" id="canvasWrapper">
+                    <canvas id="imageCanvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Right Panel: Sidebar controls -->
+            <div class="sidebar">
+                <!-- Guide box -->
+                <div class="guide-box">
+                    👉 <strong>영역 생성</strong>: 캔버스를 드래그하세요.<br>
+                    👉 <strong>영역 선택</strong>: 원하는 사각형을 클릭하세요.<br>
+                    👉 <strong>수정 및 삭제</strong>: 가장자리 조절점을 드래그하거나, 선택 후 [Delete] 키를 누르세요.
+                </div>
+
+                <!-- Mode Settings -->
+                <div class="sidebar-section">
+                    <span class="sidebar-title">좌표 표시 단위</span>
+                    <div class="option-group" id="unitGroup">
+                        <button class="option-btn active" data-unit="px">픽셀 (px)</button>
+                        <button class="option-btn" data-unit="pct">퍼센트 (%)</button>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <span class="sidebar-title">좌표 수식 형식</span>
+                    <div class="option-group"
+                        style="flex-direction: column; gap: 4px; background: transparent; border: none; padding: 0;"
+                        id="formatGroup">
+                        <button class="option-btn active" style="text-align: left; padding: 10px 12px; width: 100%;"
+                            data-format="startEnd">시작(X1,Y1) & 끝(X2,Y2)</button>
+                        <button class="option-btn" style="text-align: left; padding: 10px 12px; width: 100%;"
+                            data-format="centerSize">중심(Xc,Yc) & 크기(W,H)</button>
+                        <button class="option-btn" style="text-align: left; padding: 10px 12px; width: 100%;"
+                            data-format="startSize">시작(X1,Y1) & 크기(W,H)</button>
+                    </div>
+                </div>
+
+                <!-- Selected Area Details -->
+                <div class="sidebar-section" id="activeAreaSection">
+                    <span class="sidebar-title">선택된 영역 세부 정보</span>
+                    <div class="coords-grid" id="coordsInputGrid">
+                        <div class="coord-field">
+                            <label id="lbl1">X1</label>
+                            <input type="number" step="any" id="val1" disabled>
+                        </div>
+                        <div class="coord-field">
+                            <label id="lbl2">Y1</label>
+                            <input type="number" step="any" id="val2" disabled>
+                        </div>
+                        <div class="coord-field">
+                            <label id="lbl3">X2</label>
+                            <input type="number" step="any" id="val3" disabled>
+                        </div>
+                        <div class="coord-field">
+                            <label id="lbl4">Y2</label>
+                            <input type="number" step="any" id="val4" disabled>
+                        </div>
+                    </div>
+
+                    <div class="copy-section">
+                        <div class="coords-preview-box" id="coordsPreview">선택된 영역이 없습니다.</div>
+                        <button class="tool-btn primary" id="copyCoordsBtn" style="justify-content: center;" disabled>📋
+                            이 좌표 복사</button>
+                    </div>
+                </div>
+
+                <!-- Area List -->
+                <div class="sidebar-section">
+                    <span class="sidebar-title">생성된 영역 목록 (<span id="areaCount">0</span>)</span>
+                    <div class="area-list" id="areaList">
+                        <div class="empty-list">등록된 영역이 없습니다.</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Copy flash -->
+    <div class="copy-flash" id="copyFlash">✅ 좌표가 클립보드에 복사되었습니다</div>
+
+    <script>
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const workspace = document.getElementById('workspace');
+        const canvas = document.getElementById('imageCanvas');
+        const ctx = canvas.getContext('2d');
+        const canvasWrap = document.getElementById('canvasWrapper');
+        const imgInfoBadge = document.getElementById('imgInfoBadge');
+        const copyFlash = document.getElementById('copyFlash');
+
+        // Controls
+        const unitGroup = document.getElementById('unitGroup');
+        const formatGroup = document.getElementById('formatGroup');
+        const activeSection = document.getElementById('activeAreaSection');
+        const coordsPreview = document.getElementById('coordsPreview');
+        const copyCoordsBtn = document.getElementById('copyCoordsBtn');
+        const areaListContainer = document.getElementById('areaList');
+        const areaCountEl = document.getElementById('areaCount');
+
+        // Coord Inputs
+        const lbl1 = document.getElementById('lbl1');
+        const lbl2 = document.getElementById('lbl2');
+        const lbl3 = document.getElementById('lbl3');
+        const lbl4 = document.getElementById('lbl4');
+        const val1 = document.getElementById('val1');
+        const val2 = document.getElementById('val2');
+        const val3 = document.getElementById('val3');
+        const val4 = document.getElementById('val4');
+
+        let imgEl = null;
+        let rects = [];
+        let selectedRectId = null;
+        let currentUnit = 'px'; // 'px' | 'pct'
+        let currentFormat = 'startEnd'; // 'startEnd' | 'centerSize' | 'startSize'
+
+        // Interaction State
+        let mouseState = {
+            isDown: false,
+            mode: null, // 'create' | 'move' | 'resize' | 'hover'
+            activeHandle: null, // 'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'
+            startX: 0,
+            startY: 0,
+            startRect: null,
+            lastMouseX: 0,
+            lastMouseY: 0
+        };
+
+        // Live mouse guide coordinates
+        let liveMouseX = 0;
+        let liveMouseY = 0;
+        let isMouseInCanvas = false;
+
+        // ─── Event Listeners ───
+        uploadZone.addEventListener('click', () => fileInput.click());
+        uploadZone.addEventListener('dragover', e => {
+            e.preventDefault();
+            uploadZone.classList.add('drag-over');
+        });
+        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+        uploadZone.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadZone.classList.remove('drag-over');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) loadImage(file);
+        });
+
+        fileInput.addEventListener('change', e => {
+            if (e.target.files[0]) loadImage(e.target.files[0]);
+        });
+
+        function loadImage(file) {
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => {
+                imgEl = img;
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                rects = [];
+                selectedRectId = null;
+
+                // Show info badge
+                const kb = (file.size / 1024).toFixed(1);
+                imgInfoBadge.textContent = `${img.naturalWidth} × ${img.naturalHeight}px  •  ${kb} KB  •  ${file.name}`;
+
+                // Show workspace, hide upload zone
+                uploadZone.style.display = 'none';
+                workspace.classList.add('visible');
+                URL.revokeObjectURL(url);
+                updateUI();
+                draw();
+            };
+            img.src = url;
+        }
+
+        // ─── Color Helper (Light translucent HSL) ───
+        function getRandomColor() {
+            const hue = Math.floor(Math.random() * 360);
+            return {
+                fill: `hsla(${hue}, 75%, 65%, 0.35)`,
+                stroke: `hsla(${hue}, 80%, 55%, 0.85)`
+            };
+        }
+
+        // ─── Change Units & Format ───
+        unitGroup.addEventListener('click', e => {
+            const btn = e.target.closest('[data-unit]');
+            if (!btn) return;
+            Array.from(unitGroup.children).forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentUnit = btn.dataset.unit;
+            updateUI();
+            draw();
+        });
+
+        formatGroup.addEventListener('click', e => {
+            const btn = e.target.closest('[data-format]');
+            if (!btn) return;
+            Array.from(formatGroup.children).forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentFormat = btn.dataset.format;
+            updateUI();
+            draw();
+        });
+
+        // ─── Keyboard interactions ───
+        window.addEventListener('keydown', e => {
+            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedRectId !== null) {
+                // Don't trigger delete if user is currently typing in coordinates fields
+                if (document.activeElement.tagName === 'INPUT') return;
+
+                rects = rects.filter(r => r.id !== selectedRectId);
+                selectedRectId = null;
+                updateUI();
+                draw();
+            }
+        });
+
+        // ─── Screen <-> Image Pixel conversion helpers ───
+        function getCanvasCoords(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            const clientXInCanvas = clientX - rect.left;
+            const clientYInCanvas = clientY - rect.top;
+
+            // Clamp coordinates inside image boundary
+            const clampedX = Math.max(0, Math.min(clientXInCanvas, rect.width));
+            const clampedY = Math.max(0, Math.min(clientYInCanvas, rect.height));
+
+            // Calculate original image pixels
+            const scaleX = imgEl.naturalWidth / rect.width;
+            const scaleY = imgEl.naturalHeight / rect.height;
+
+            return {
+                pxX: Math.round(clampedX * scaleX),
+                pxY: Math.round(clampedY * scaleY),
+                screenX: clampedX,
+                screenY: clampedY,
+                scaleX: scaleX,
+                scaleY: scaleY
+            };
+        }
+
+        // ─── Handle interaction logic ───
+        const handleSize = 8; // Size on screen
+
+        function getRectHandles(r, scaleX, scaleY) {
+            const x1 = r.x1;
+            const y1 = r.y1;
+            const x2 = r.x2;
+            const y2 = r.y2;
+            const xc = (x1 + x2) / 2;
+            const yc = (y1 + y2) / 2;
+
+            // Convert to canvas screen units
+            const sX1 = x1 / scaleX;
+            const sY1 = y1 / scaleY;
+            const sX2 = x2 / scaleX;
+            const sY2 = y2 / scaleY;
+            const sXc = xc / scaleX;
+            const sYc = yc / scaleY;
+
+            return {
+                nw: { x: sX1, y: sY1, cursor: 'nwse-resize' },
+                n: { x: sXc, y: sY1, cursor: 'ns-resize' },
+                ne: { x: sX2, y: sY1, cursor: 'nesw-resize' },
+                e: { x: sX2, y: sYc, cursor: 'ew-resize' },
+                se: { x: sX2, y: sY2, cursor: 'nwse-resize' },
+                s: { x: sXc, y: sY2, cursor: 'ns-resize' },
+                sw: { x: sX1, y: sY2, cursor: 'nesw-resize' },
+                w: { x: sX1, y: sYc, cursor: 'ew-resize' }
+            };
+        }
+
+        function checkActiveHandle(mouseX, mouseY, rect, scaleX, scaleY) {
+            const handles = getRectHandles(rect, scaleX, scaleY);
+            for (const [key, h] of Object.entries(handles)) {
+                if (Math.abs(mouseX - h.x) <= handleSize && Math.abs(mouseY - h.y) <= handleSize) {
+                    return key;
+                }
+            }
+            return null;
+        }
+
+        function isInsideRect(x, y, r, scaleX, scaleY) {
+            const minX = Math.min(r.x1, r.x2) / scaleX;
+            const maxX = Math.max(r.x1, r.x2) / scaleX;
+            const minY = Math.min(r.y1, r.y2) / scaleY;
+            const maxY = Math.max(r.y1, r.y2) / scaleY;
+            return x >= minX && x <= maxX && y >= minY && y <= maxY;
+        }
+
+        // ─── Mouse Interactions on Canvas ───
+        canvasWrap.addEventListener('mousedown', e => {
+            if (!imgEl) return;
+            const coords = getCanvasCoords(e.clientX, e.clientY);
+            const rectBound = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rectBound.left;
+            const mouseY = e.clientY - rectBound.top;
+
+            mouseState.isDown = true;
+            mouseState.startX = coords.pxX;
+            mouseState.startY = coords.pxY;
+            mouseState.lastMouseX = coords.pxX;
+            mouseState.lastMouseY = coords.pxY;
+
+            // Check if we clicked on the selected rect's handle
+            if (selectedRectId !== null) {
+                const selectedRect = rects.find(r => r.id === selectedRectId);
+                if (selectedRect) {
+                    const handle = checkActiveHandle(mouseX, mouseY, selectedRect, coords.scaleX, coords.scaleY);
+                    if (handle) {
+                        mouseState.mode = 'resize';
+                        mouseState.activeHandle = handle;
+                        mouseState.startRect = { ...selectedRect };
+                        return;
+                    }
+                }
+            }
+
+            // Check if we clicked inside any rect (from top-most/last created to first)
+            for (let i = rects.length - 1; i >= 0; i--) {
+                const r = rects[i];
+                if (isInsideRect(mouseX, mouseY, r, coords.scaleX, coords.scaleY)) {
+                    selectedRectId = r.id;
+                    mouseState.mode = 'move';
+                    mouseState.startRect = { ...r };
+                    updateUI();
+                    draw();
+                    return;
+                }
+            }
+
+            // If clicked empty space, start creating a new rect
+            selectedRectId = null;
+            mouseState.mode = 'create';
+            const colors = getRandomColor();
+            const newRect = {
+                id: Date.now(),
+                name: `영역 ${rects.length + 1}`,
+                x1: coords.pxX,
+                y1: coords.pxY,
+                x2: coords.pxX,
+                y2: coords.pxY,
+                fillColor: colors.fill,
+                strokeColor: colors.stroke
+            };
+            rects.push(newRect);
+            selectedRectId = newRect.id;
+            updateUI();
+            draw();
+        });
+
+        canvasWrap.addEventListener('mousemove', e => {
+            if (!imgEl) return;
+            const coords = getCanvasCoords(e.clientX, e.clientY);
+            const rectBound = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rectBound.left;
+            const mouseY = e.clientY - rectBound.top;
+
+            liveMouseX = coords.pxX;
+            liveMouseY = coords.pxY;
+            isMouseInCanvas = true;
+
+            if (!mouseState.isDown) {
+                // Change cursor icon depending on what's hovered
+                let cursorStyle = 'crosshair';
+                if (selectedRectId !== null) {
+                    const selectedRect = rects.find(r => r.id === selectedRectId);
+                    if (selectedRect) {
+                        const handle = checkActiveHandle(mouseX, mouseY, selectedRect, coords.scaleX, coords.scaleY);
+                        if (handle) {
+                            const handles = getRectHandles(selectedRect, coords.scaleX, coords.scaleY);
+                            cursorStyle = handles[handle].cursor;
+                            canvasWrap.style.cursor = cursorStyle;
+                            draw();
+                            return;
+                        }
+                    }
+                }
+
+                // Check if hover inside other rects
+                for (let i = rects.length - 1; i >= 0; i--) {
+                    if (isInsideRect(mouseX, mouseY, rects[i], coords.scaleX, coords.scaleY)) {
+                        cursorStyle = 'move';
+                        break;
+                    }
+                }
+                canvasWrap.style.cursor = cursorStyle;
+                draw();
+                return;
+            }
+
+            const activeRect = rects.find(r => r.id === selectedRectId);
+            if (!activeRect) return;
+
+            const dx = coords.pxX - mouseState.startX;
+            const dy = coords.pxY - mouseState.startY;
+
+            if (mouseState.mode === 'create') {
+                activeRect.x2 = coords.pxX;
+                activeRect.y2 = coords.pxY;
+            } else if (mouseState.mode === 'move') {
+                const w = mouseState.startRect.x2 - mouseState.startRect.x1;
+                const h = mouseState.startRect.y2 - mouseState.startRect.y1;
+
+                let nx1 = mouseState.startRect.x1 + dx;
+                let ny1 = mouseState.startRect.y1 + dy;
+                let nx2 = nx1 + w;
+                let ny2 = ny1 + h;
+
+                // Clamp to image dimensions
+                if (nx1 < 0) { nx1 = 0; nx2 = w; }
+                if (nx2 > imgEl.naturalWidth) { nx2 = imgEl.naturalWidth; nx1 = nx2 - w; }
+                if (ny1 < 0) { ny1 = 0; ny2 = h; }
+                if (ny2 > imgEl.naturalHeight) { ny2 = imgEl.naturalHeight; ny1 = ny2 - h; }
+
+                activeRect.x1 = nx1;
+                activeRect.y1 = ny1;
+                activeRect.x2 = nx2;
+                activeRect.y2 = ny2;
+            } else if (mouseState.mode === 'resize') {
+                const start = mouseState.startRect;
+                const handle = mouseState.activeHandle;
+
+                if (handle.includes('e')) activeRect.x2 = Math.max(0, Math.min(coords.pxX, imgEl.naturalWidth));
+                if (handle.includes('w')) activeRect.x1 = Math.max(0, Math.min(coords.pxX, imgEl.naturalWidth));
+                if (handle.includes('s')) activeRect.y2 = Math.max(0, Math.min(coords.pxY, imgEl.naturalHeight));
+                if (handle.includes('n')) activeRect.y1 = Math.max(0, Math.min(coords.pxY, imgEl.naturalHeight));
+            }
+
+            updateUI();
+            draw();
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (!mouseState.isDown) return; // 캔버스에서 마우스를 누른 상태가 아니었다면 전역 mouseup 로직 생략 (리스트 클릭 등의 이벤트 유실 방지)
+
+            if (mouseState.mode === 'create') {
+                // Remove tiny or invalid rectangles
+                const activeRect = rects.find(r => r.id === selectedRectId);
+                if (activeRect && Math.abs(activeRect.x2 - activeRect.x1) < 4 && Math.abs(activeRect.y2 - activeRect.y1) < 4) {
+                    rects = rects.filter(r => r.id !== selectedRectId);
+                    selectedRectId = null;
+                }
+            }
+            mouseState.isDown = false;
+            mouseState.mode = null;
+            mouseState.activeHandle = null;
+            updateUI();
+            draw();
+        });
+
+        canvasWrap.addEventListener('mouseleave', () => {
+            isMouseInCanvas = false;
+            draw();
+        });
+
+        // ─── Input Field Value Changes ───
+        function getNormalizedCoords(r) {
+            return {
+                x1: Math.min(r.x1, r.x2),
+                y1: Math.min(r.y1, r.y2),
+                x2: Math.max(r.x1, r.x2),
+                y2: Math.max(r.y1, r.y2)
+            };
+        }
+
+        function handleManualInput() {
+            if (selectedRectId === null) return;
+            const activeRect = rects.find(r => r.id === selectedRectId);
+            if (!activeRect) return;
+
+            const v1 = parseFloat(val1.value) || 0;
+            const v2 = parseFloat(val2.value) || 0;
+            const v3 = parseFloat(val3.value) || 0;
+            const v4 = parseFloat(val4.value) || 0;
+
+            const toPxX = (v) => currentUnit === 'pct' ? Math.round((v / 100) * imgEl.naturalWidth) : Math.round(v);
+            const toPxY = (v) => currentUnit === 'pct' ? Math.round((v / 100) * imgEl.naturalHeight) : Math.round(v);
+
+            if (currentFormat === 'startEnd') {
+                activeRect.x1 = Math.max(0, Math.min(toPxX(v1), imgEl.naturalWidth));
+                activeRect.y1 = Math.max(0, Math.min(toPxY(v2), imgEl.naturalHeight));
+                activeRect.x2 = Math.max(0, Math.min(toPxX(v3), imgEl.naturalWidth));
+                activeRect.y2 = Math.max(0, Math.min(toPxY(v4), imgEl.naturalHeight));
+            } else if (currentFormat === 'centerSize') {
+                const cx = toPxX(v1);
+                const cy = toPxY(v2);
+                const w = toPxX(v3);
+                const h = toPxY(v4);
+                activeRect.x1 = Math.max(0, Math.min(Math.round(cx - w / 2), imgEl.naturalWidth));
+                activeRect.y1 = Math.max(0, Math.min(Math.round(cy - h / 2), imgEl.naturalHeight));
+                activeRect.x2 = Math.max(0, Math.min(Math.round(cx + w / 2), imgEl.naturalWidth));
+                activeRect.y2 = Math.max(0, Math.min(Math.round(cy + h / 2), imgEl.naturalHeight));
+            } else if (currentFormat === 'startSize') {
+                const x1Val = toPxX(v1);
+                const y1Val = toPxY(v2);
+                const w = toPxX(v3);
+                const h = toPxY(v4);
+                activeRect.x1 = Math.max(0, Math.min(x1Val, imgEl.naturalWidth));
+                activeRect.y1 = Math.max(0, Math.min(y1Val, imgEl.naturalHeight));
+                activeRect.x2 = Math.max(0, Math.min(x1Val + w, imgEl.naturalWidth));
+                activeRect.y2 = Math.max(0, Math.min(y1Val + h, imgEl.naturalHeight));
+            }
+
+            draw();
+            updatePreviewText();
+        }
+
+        [val1, val2, val3, val4].forEach(input => {
+            input.addEventListener('input', handleManualInput);
+        });
+
+        // ─── Drawing Pipeline ───
+        function draw() {
+            if (!imgEl) return;
+
+            // Clear Canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(imgEl, 0, 0);
+
+            const rectBound = canvas.getBoundingClientRect();
+            const scaleX = imgEl.naturalWidth / rectBound.width;
+            const scaleY = imgEl.naturalHeight / rectBound.height;
+
+            // Draw all stored rectangles
+            rects.forEach(r => {
+                const norm = getNormalizedCoords(r);
+                const w = norm.x2 - norm.x1;
+                const h = norm.y2 - norm.y1;
+
+                ctx.fillStyle = r.fillColor;
+                ctx.fillRect(norm.x1, norm.y1, w, h);
+
+                // Border
+                ctx.lineWidth = Math.max(1, Math.round(2 * scaleX));
+                ctx.strokeStyle = r.strokeColor;
+
+                if (r.id === selectedRectId) {
+                    // Dash style for selected area
+                    ctx.setLineDash([Math.round(6 * scaleX), Math.round(4 * scaleX)]);
+                } else {
+                    ctx.setLineDash([]);
+                }
+                ctx.strokeRect(norm.x1, norm.y1, w, h);
+            });
+            ctx.setLineDash([]); // reset
+
+            // Draw resizing handles & guidelines for selected rectangle
+            if (selectedRectId !== null) {
+                const selectedRect = rects.find(r => r.id === selectedRectId);
+                if (selectedRect) {
+                    const norm = getNormalizedCoords(selectedRect);
+
+                    // Draw coordinates text next to selected area
+                    ctx.fillStyle = 'rgba(10, 11, 15, 0.85)';
+                    ctx.fillRect(norm.x1, Math.max(0, norm.y1 - Math.round(25 * scaleY)), Math.round(120 * scaleX), Math.round(20 * scaleY));
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = `${Math.round(11 * scaleX)}px 'JetBrains Mono'`;
+                    ctx.fillText(selectedRect.name, norm.x1 + Math.round(6 * scaleX), norm.y1 - Math.round(8 * scaleY));
+
+                    // Draw 8 handle points
+                    const handles = getRectHandles(selectedRect, scaleX, scaleY);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.strokeStyle = varColor('--accent');
+                    ctx.lineWidth = 2;
+
+                    for (const h of Object.values(handles)) {
+                        // Draw handle in canvas native coordinates
+                        const hx = h.x * scaleX;
+                        const hy = h.y * scaleY;
+                        const size = handleSize * scaleX;
+
+                        ctx.fillRect(hx - size / 2, hy - size / 2, size, size);
+                        ctx.strokeRect(hx - size / 2, hy - size / 2, size, size);
+                    }
+                }
+            }
+
+            // Draw real-time guide crosshairs
+            if (isMouseInCanvas && !mouseState.isDown) {
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = 'rgba(99, 102, 241, 0.4)';
+
+                // Horizontal line
+                ctx.beginPath();
+                ctx.moveTo(0, liveMouseY);
+                ctx.lineTo(canvas.width, liveMouseY);
+                ctx.stroke();
+
+                // Vertical line
+                ctx.beginPath();
+                ctx.moveTo(liveMouseX, 0);
+                ctx.lineTo(liveMouseX, canvas.height);
+                ctx.stroke();
+
+                // Cursor guide box showing coordinates
+                const labelText = getCursorLabelText(liveMouseX, liveMouseY);
+                ctx.font = `${Math.round(11 * scaleX)}px 'JetBrains Mono'`;
+                const textWidth = ctx.measureText(labelText).width;
+                const boxW = textWidth + Math.round(12 * scaleX);
+                const boxH = Math.round(22 * scaleY);
+
+                let boxX = liveMouseX + Math.round(10 * scaleX);
+                let boxY = liveMouseY + Math.round(10 * scaleY);
+                if (boxX + boxW > canvas.width) boxX = liveMouseX - boxW - Math.round(10 * scaleX);
+                if (boxY + boxH > canvas.height) boxY = liveMouseY - boxH - Math.round(10 * scaleY);
+
+                ctx.fillStyle = 'rgba(10, 11, 15, 0.9)';
+                ctx.strokeStyle = 'rgba(99, 102, 241, 0.7)';
+                ctx.lineWidth = 1;
+                ctx.fillRect(boxX, boxY, boxW, boxH);
+                ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+                ctx.fillStyle = '#f1f2f5';
+                ctx.fillText(labelText, boxX + Math.round(6 * scaleX), boxY + Math.round(15 * scaleY));
+            }
+        }
+
+        function varColor(name) {
+            // Helper to match colors
+            if (name === '--accent') return '#6366f1';
+            return '#ffffff';
+        }
+
+        function getCursorLabelText(x, y) {
+            if (currentUnit === 'px') {
+                return `X:${x}px, Y:${y}px`;
+            } else {
+                const pctX = ((x / imgEl.naturalWidth) * 100).toFixed(1);
+                const pctY = ((y / imgEl.naturalHeight) * 100).toFixed(1);
+                return `X:${pctX}%, Y:${pctY}%`;
+            }
+        }
+
+        // ─── Update UI Sidebar Elements ───
+        function updateUI() {
+            // Update Area List
+            areaListContainer.innerHTML = '';
+            areaCountEl.textContent = rects.length;
+
+            if (rects.length === 0) {
+                areaListContainer.innerHTML = '<div class="empty-list">등록된 영역이 없습니다.</div>';
+            } else {
+                rects.forEach(r => {
+                    const div = document.createElement('div');
+                    div.className = `area-item ${r.id === selectedRectId ? 'selected' : ''}`;
+                    div.innerHTML = `
+            <div>
+              <span class="area-color-indicator" style="background: ${r.fillColor}; border: 1px solid ${r.strokeColor};"></span>
+              <span style="font-weight: 500;">${r.name}</span>
+            </div>
+            <button class="delete-btn" onclick="event.stopPropagation(); deleteRect(${r.id})">🗑️</button>
+          `;
+                    div.addEventListener('click', () => {
+                        selectedRectId = r.id;
+                        updateUI();
+                        draw();
+                        // 첫 번째 입력 필드에 포커스 및 선택 처리 (type="number" 예외 방지)
+                        if (val1) {
+                            val1.focus();
+                            try {
+                                val1.select();
+                            } catch (err) {
+                                // 일부 브라우저에서 type="number"에 대한 select() 호출 예외 무시
+                            }
+                        }
+                    });
+                    areaListContainer.appendChild(div);
+                });
+            }
+
+            // Update Active Form inputs
+            const activeRect = rects.find(r => r.id === selectedRectId);
+            if (activeRect) {
+                val1.disabled = false;
+                val2.disabled = false;
+                val3.disabled = false;
+                val4.disabled = false;
+                copyCoordsBtn.disabled = false;
+
+                const norm = getNormalizedCoords(activeRect);
+                const w = norm.x2 - norm.x1;
+                const h = norm.y2 - norm.y1;
+                const xc = Math.round((norm.x1 + norm.x2) / 2);
+                const yc = Math.round((norm.y1 + norm.y2) / 2);
+
+                // Factor unit scale
+                const scaleValX = (v) => currentUnit === 'pct' ? parseFloat(((v / imgEl.naturalWidth) * 100).toFixed(2)) : v;
+                const scaleValY = (v) => currentUnit === 'pct' ? parseFloat(((v / imgEl.naturalHeight) * 100).toFixed(2)) : v;
+
+                if (currentFormat === 'startEnd') {
+                    lbl1.textContent = `시작 X1 (${currentUnit})`;
+                    lbl2.textContent = `시작 Y1 (${currentUnit})`;
+                    lbl3.textContent = `끝 X2 (${currentUnit})`;
+                    lbl4.textContent = `끝 Y2 (${currentUnit})`;
+
+                    val1.value = scaleValX(norm.x1);
+                    val2.value = scaleValY(norm.y1);
+                    val3.value = scaleValX(norm.x2);
+                    val4.value = scaleValY(norm.y2);
+                } else if (currentFormat === 'centerSize') {
+                    lbl1.textContent = `중심 Xc (${currentUnit})`;
+                    lbl2.textContent = `중심 Yc (${currentUnit})`;
+                    lbl3.textContent = `넓이 W (${currentUnit})`;
+                    lbl4.textContent = `높이 H (${currentUnit})`;
+
+                    val1.value = scaleValX(xc);
+                    val2.value = scaleValY(yc);
+                    val3.value = scaleValX(w);
+                    val4.value = scaleValY(h);
+                } else if (currentFormat === 'startSize') {
+                    lbl1.textContent = `시작 X1 (${currentUnit})`;
+                    lbl2.textContent = `시작 Y1 (${currentUnit})`;
+                    lbl3.textContent = `넓이 W (${currentUnit})`;
+                    lbl4.textContent = `높이 H (${currentUnit})`;
+
+                    val1.value = scaleValX(norm.x1);
+                    val2.value = scaleValY(norm.y1);
+                    val3.value = scaleValX(w);
+                    val4.value = scaleValY(h);
+                }
+
+                updatePreviewText();
+            } else {
+                val1.disabled = true;
+                val2.disabled = true;
+                val3.disabled = true;
+                val4.disabled = true;
+                copyCoordsBtn.disabled = true;
+
+                val1.value = '';
+                val2.value = '';
+                val3.value = '';
+                val4.value = '';
+
+                coordsPreview.textContent = '선택된 영역이 없습니다.';
+            }
+        }
+
+        function updatePreviewText() {
+            const activeRect = rects.find(r => r.id === selectedRectId);
+            if (!activeRect) return;
+
+            const norm = getNormalizedCoords(activeRect);
+            const w = norm.x2 - norm.x1;
+            const h = norm.y2 - norm.y1;
+            const xc = Math.round((norm.x1 + norm.x2) / 2);
+            const yc = Math.round((norm.y1 + norm.y2) / 2);
+
+            const u = currentUnit === 'pct' ? '%' : 'px';
+
+            const scaleValX = (v) => currentUnit === 'pct' ? ((v / imgEl.naturalWidth) * 100).toFixed(2) : v;
+            const scaleValY = (v) => currentUnit === 'pct' ? ((v / imgEl.naturalHeight) * 100).toFixed(2) : v;
+
+            let text = '';
+            if (currentFormat === 'startEnd') {
+                text = `coords="${scaleValX(norm.x1)}${u}, ${scaleValY(norm.y1)}${u}, ${scaleValX(norm.x2)}${u}, ${scaleValY(norm.y2)}${u}"`;
+            } else if (currentFormat === 'centerSize') {
+                text = `center="${scaleValX(xc)}${u}, ${scaleValY(yc)}${u}" size="${scaleValX(w)}${u}, ${scaleValY(h)}${u}"`;
+            } else if (currentFormat === 'startSize') {
+                text = `rect="${scaleValX(norm.x1)}${u}, ${scaleValY(norm.y1)}${u}" size="${scaleValX(w)}${u}, ${scaleValY(h)}${u}"`;
+            }
+
+            coordsPreview.textContent = text;
+        }
+
+        function deleteRect(id) {
+            rects = rects.filter(r => r.id !== id);
+            if (selectedRectId === id) selectedRectId = null;
+            updateUI();
+            draw();
+        }
+
+        // ─── Copy Button ───
+        copyCoordsBtn.addEventListener('click', () => {
+            const text = coordsPreview.textContent;
+            if (text && text !== '선택된 영역이 없습니다.') {
+                navigator.clipboard.writeText(text).then(() => {
+                    copyFlash.classList.add('show');
+                    setTimeout(() => copyFlash.classList.remove('show'), 2200);
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>
