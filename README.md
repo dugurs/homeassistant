@@ -1,6 +1,6 @@
 ﻿# homeassistant
  
- ## Blueprint
+## Blueprint
 
 | 블루트린트 | 종류 | 설치 |
 | -- | -- | -- |
