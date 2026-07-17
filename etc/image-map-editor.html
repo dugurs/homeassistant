@@ -1316,6 +1316,10 @@
                 val4.disabled = false;
                 copyCoordsBtn.disabled = false;
 
+                // Update input steps based on unit
+                const stepValue = currentUnit === 'pct' ? '0.01' : '1';
+                [val1, val2, val3, val4].forEach(input => input.setAttribute('step', stepValue));
+
                 const norm = getNormalizedCoords(activeRect);
                 const w = norm.x2 - norm.x1;
                 const h = norm.y2 - norm.y1;
