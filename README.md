@@ -20,10 +20,17 @@
 | [전기요금 센서 가정용](https://github.com/dugurs/kwh_to_won) | [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?repository=kwh_to_won&owner=dugurs&category=integration) | [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=kwh_to_won) |
 | [전기요금 센서 일반용](https://github.com/dugurs/kwh_to_won_general) | [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?repository=kwh_to_won_general&owner=dugurs&category=integration) | [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=kwh_to_won_general) |
 | [WeatherNews](https://github.com/dugurs/ha-weathernews) | [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?repository=ha-weathernews&owner=dugurs&category=integration) | [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=weathernews) |
-
+| [도시 가스 요금](https://github.com/dugurs/ha-city-gas-bill) | [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?repository=ha-city-gas-bill&owner=dugurs&category=integration) | [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=city_gas_bill) |
 
 ## Lovelace
 
 | 제목 | 설치 |
 | -- | -- |
 | [lovelace xiaomi miot card](https://github.com/dugurs/lovelace-fan-xiaomi-miot) | [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dugurs&category=Lovelace&repository=lovelace-fan-xiaomi-miot) |
+
+
+## etc
+
+| 제목 | 설치 |
+| -- | -- |
+| [이미지 좌표 및 맵 영역 편집기](https://github.com/dugurs/homeassistant/tree/main/etc/image-map-editor) | [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dugurs&category=Lovelace&repository=lovelace-fan-xiaomi-miot) |
