@@ -1,5 +1,6 @@
 ﻿# homeassistant
- 
+ [GitHub](https://github.com/dugurs/homeassistent/)
+
 ## Blueprint
 
 | 블루트린트 | 종류 | 설치 |
@@ -33,4 +34,5 @@
 
 | 제목 | 설치 |
 | -- | -- |
-| [이미지 좌표 및 맵 영역 편집기](https://github.com/dugurs/homeassistant/tree/main/etc/image-map-editor) | [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dugurs&category=Lovelace&repository=lovelace-fan-xiaomi-miot) |
+| [이미지 좌표 및 맵 영역 편집기](https://github.com/dugurs/homeassistent/etc/image-map-editor) | [Live Demo](https://dugurs.github.io/homeassistant/etc/image-map-editor) |
+
